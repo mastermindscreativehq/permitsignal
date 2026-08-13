@@ -1,0 +1,311 @@
+{
+  "name": "PermitSignal — Government Packet Intake",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "PS — Government Packet Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [240, 300],
+      "notes": "Production trigger: receives the ACTUAL government packet PDF as a multipart/form-data upload (file field name: \"file\"). This is real file bytes handed to n8n by whatever upstream system holds the packet (inbound email-to-webhook, a watched-folder relay, a manual upload form) -- not a URL, not a filename, not JSON. Optional form fields: reference_date (YYYY-MM-DD), live_enrichment (true/false), sync_to_supabase (true/false).",
+      "webhookId": "permitsignal-packet-intake",
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "permitsignal-packet-intake",
+        "responseMode": "responseNode",
+        "options": {}
+      }
+    },
+    {
+      "id": "2",
+      "name": "PS — Validate Upload",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Confirms the webhook actually received a binary file under the \"file\" field before calling the backend. document_downloader.save_uploaded_document() performs the authoritative %PDF magic-byte check server-side -- this is only a fast-fail for a missing/empty upload so a malformed request doesn't waste a backend round trip.",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "has-file",
+              "leftValue": "={{ Object.keys($binary || {}).length > 0 }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "3",
+      "name": "PS — Document Fetch",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 220],
+      "notes": "Forwards the real uploaded PDF bytes, unmodified, to the PermitSignal backend as a multipart/form-data POST -- POST /pipeline/ingest/file (backend/app/main.py). The backend re-validates the %PDF magic bytes, writes it into data/documents/, then runs the full 7-stage pipeline via pipeline_orchestrator.run_and_save(), including the Supabase upsert when sync_to_supabase=true. No extraction, scoring, or persistence logic runs in n8n.",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERMITSIGNAL_API_URL }}/pipeline/ingest/file",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "file",
+              "inputDataFieldName": "file"
+            },
+            {
+              "name": "reference_date",
+              "value": "={{ $json.body?.reference_date || $now.toFormat('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "live_enrichment",
+              "value": "={{ $json.body?.live_enrichment ?? 'false' }}"
+            },
+            {
+              "name": "sync_to_supabase",
+              "value": "={{ $json.body?.sync_to_supabase ?? 'true' }}"
+            }
+          ]
+        },
+        "options": {
+          "timeout": 120000
+        }
+      }
+    },
+    {
+      "id": "4",
+      "name": "PS — Validate Document",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2,
+      "position": [900, 220],
+      "notes": "Branches on /pipeline/ingest/file's response status. A non-'success' response means either the upload wasn't a real PDF, the pipeline failed, or the backend was unreachable -- routed to the error response path, never silently swallowed.",
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validate-status",
+              "leftValue": "={{ $json.status }}",
+              "rightValue": "success",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "5",
+      "name": "PS — Run PermitSignal",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1120, 140],
+      "notes": "Extraction/friction/date/opportunity/identity/enrichment/qualification already ran server-side inside the single /pipeline/ingest/file call above -- this node only surfaces the resulting real counts for the execution log and final response.",
+      "parameters": {
+        "values": {
+          "number": [
+            { "name": "applications_count", "value": "={{ $json.counts.applications }}" },
+            { "name": "opportunities_count", "value": "={{ $json.counts.opportunities }}" },
+            { "name": "lead_queue_count", "value": "={{ $json.counts.lead_queue }}" }
+          ],
+          "string": [
+            { "name": "output_path", "value": "={{ $json.output_path }}" },
+            { "name": "pdf_path", "value": "={{ $json.pdf_path }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "6",
+      "name": "PS — Supabase Upsert",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1340, 140],
+      "notes": "The actual upsert (backend/app/services/lead_repository.upsert_leads, keyed on application_number -- re-ingesting the same packet updates the same rows instead of duplicating them) already ran inside /pipeline/ingest/file when sync_to_supabase=true. This node surfaces its real status (disabled/skipped/synced/error) rather than re-implementing persistence in n8n.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "supabase_sync_status", "value": "={{ $json.supabase_sync?.status ?? 'unknown' }}" },
+            { "name": "supabase_sync_rows", "value": "={{ $json.supabase_sync?.rows ?? 0 }}" },
+            { "name": "supabase_sync_error", "value": "={{ $json.supabase_sync?.error ?? '' }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7",
+      "name": "PS — Execution Log",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1560, 140],
+      "notes": "Summary record for this run. Wire this node's output to whatever execution log you use -- n8n's own execution history already retains the full input/output of every node for traceability (packet -> application_number counts -> processing result -> Supabase status).",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "run_at", "value": "={{ $now.toISO() }}" },
+            {
+              "name": "summary",
+              "value": "={{ 'PermitSignal ingest: ' + $('PS — Run PermitSignal').item.json.applications_count + ' applications, ' + $('PS — Run PermitSignal').item.json.opportunities_count + ' opportunities, supabase_sync=' + $('PS — Supabase Upsert').item.json.supabase_sync_status }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8",
+      "name": "PS — Success Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1780, 140],
+      "notes": "Structured result returned to the caller. Only fields the backend actually computes today are populated -- this pass does not fabricate new_leads/updated_leads/qualified_leads/follow_up_candidates counts, since change detection (Phase 4) and follow-up routing (Phase 6) are deliberately separate, not-yet-built workflows (see README \"Out of scope for this pass\").",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "success" }
+          ],
+          "number": [
+            { "name": "applications_processed", "value": "={{ $('PS — Run PermitSignal').item.json.applications_count }}" },
+            { "name": "opportunities_processed", "value": "={{ $('PS — Run PermitSignal').item.json.opportunities_count }}" },
+            { "name": "leads_synced", "value": "={{ $('PS — Supabase Upsert').item.json.supabase_sync_rows }}" }
+          ],
+          "string": [
+            { "name": "supabase_sync_status", "value": "={{ $('PS — Supabase Upsert').item.json.supabase_sync_status }}" },
+            { "name": "output_path", "value": "={{ $('PS — Run PermitSignal').item.json.output_path }}" }
+          ],
+          "array": [
+            { "name": "errors", "value": "=[]" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9",
+      "name": "PS — Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [2000, 140],
+      "notes": "Terminal node for a successful intake run -- returns the structured result from PS — Success Response as the webhook's HTTP response.",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 200
+        }
+      }
+    },
+    {
+      "id": "10",
+      "name": "PS — Error Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [900, 420],
+      "notes": "Reached either when PS — Validate Upload finds no binary file, or PS — Validate Document sees a non-success backend response (invalid PDF, pipeline failure, Supabase failure surfaced via supabase_sync.error, or the backend being unreachable). Errors are surfaced here, never swallowed.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "error" }
+          ],
+          "array": [
+            {
+              "name": "errors",
+              "value": "={{ [ $json.detail ?? ( Object.keys($binary || {}).length === 0 ? 'No file uploaded in the \"file\" field.' : 'PermitSignal processing failed.' ) ] }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "11",
+      "name": "PS — Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1120, 420],
+      "notes": "Terminal node for a failed intake run -- returns a non-2xx structured error so the caller (and n8n's execution history) can see the failure instead of it being silently dropped.",
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ $json }}",
+        "options": {
+          "responseCode": 502
+        }
+      }
+    }
+  ],
+  "connections": {
+    "PS — Government Packet Webhook": {
+      "main": [
+        [{ "node": "PS — Validate Upload", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Validate Upload": {
+      "main": [
+        [{ "node": "PS — Document Fetch", "type": "main", "index": 0 }],
+        [{ "node": "PS — Error Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Document Fetch": {
+      "main": [
+        [{ "node": "PS — Validate Document", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Validate Document": {
+      "main": [
+        [{ "node": "PS — Run PermitSignal", "type": "main", "index": 0 }],
+        [{ "node": "PS — Error Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Run PermitSignal": {
+      "main": [
+        [{ "node": "PS — Supabase Upsert", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Supabase Upsert": {
+      "main": [
+        [{ "node": "PS — Execution Log", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Execution Log": {
+      "main": [
+        [{ "node": "PS — Success Response", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Success Response": {
+      "main": [
+        [{ "node": "PS — Respond Success", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS — Error Response": {
+      "main": [
+        [{ "node": "PS — Respond Error", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}
