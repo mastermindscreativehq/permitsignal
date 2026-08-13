@@ -1,0 +1,750 @@
+{
+  "Tyson Reynolds": {
+    "applicant_name": "Tyson Reynolds",
+    "applicant_email": "dspublichearings@provo.gov",
+    "applicant_phone": null,
+    "company_name": null,
+    "company_website": "https://provonotes.substack.com/",
+    "company_source": "public_web",
+    "email_confidence": 0.7,
+    "phone_confidence": 0.0,
+    "company_confidence": 0.6,
+    "enrichment_status": "enriched",
+    "search_query": "\"Tyson Reynolds\" \"2000 N Canyon Road\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [
+      "dspublichearings@provo.gov"
+    ],
+    "phones_found": [],
+    "websites_found": [
+      "https://provonotes.substack.com/",
+      "https://substack.com/@provonotes",
+      "https://provonotes.substack.com/p/new-vesper-contract-walmart-money",
+      "https://substack.com/profile/165125477-julie-rose",
+      "https://docaccess.com/docviewer.html?url=https%3A%2F%2Fwww.provo.gov%2FAgendaCenter%2FViewFile%2FAgenda%2F_08122026-415&url_hash=e1b6fbccbc29a529f9669106f6d825ed&domain=provo.gov&found_on=https%3A%2F%2Fwww.provo.gov%2FAgendaCenter%2FPlanning-Commission-2",
+      "https://substackcdn.com/image/fetch/$s_!UoRc!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2Ff6be3149-a890-4638-b2d6-da71b21f3a8d_1352x1338.png",
+      "https://substackcdn.com/image/fetch/$s_!hPlk!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F16a25cfb-1010-47cb-b430-06b2654396bb_1548x1128.png",
+      "https://substackcdn.com/image/fetch/$s_!bfSd!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F42417d8a-830e-4f47-840d-7883322af6e6_923x1009.png",
+      "https://experience.arcgis.com/experience/70b576b445d54c3c8dcda295a5e4e517/",
+      "https://substackcdn.com/image/fetch/$s_!jlYb!,f_auto,q_auto:good,fl_progressive:steep/https%3A%2F%2Fsubstack-post-media.s3.amazonaws.com%2Fpublic%2Fimages%2F5f077b05-67c6-45a7-abfe-2cfb5a316ffd_777x1191.png",
+      "https://provonotes.substack.com/p/provo-river-protections-and-more?utm_source=substack&utm_medium=email&utm_content=share&action=share",
+      "https://substack.com/privacy",
+      "https://substack.com/tos",
+      "https://substack.com/ccpa#personal-data-collected",
+      "https://substack.com/signup?utm_source=substack&utm_medium=web&utm_content=footer",
+      "https://substack.com/app/app-store-redirect?utm_campaign=app-marketing&utm_content=web-footer-button",
+      "https://substack.com"
+    ],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/files/1264215.pdf",
+        "source_url": "https://www.utah.gov/pmn/files/1264215.pdf",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "intent of the developer (Tyson Reynolds) regarding the removal of the hillside behind our property. ... 2000 N Canyon Road. Pleasant View."
+      },
+      {
+        "field": "search_result",
+        "value": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_url": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "Developer Tyson Reynolds is asking the city to rezone 4 acres just north of Lavell Edwards Stadium (2000 N. Canyon Road) so he can build 9 ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "* Item 2 Tyson Reynolds requests approval of a Zone Map Amendment ... townhome development, located at 2000 N Canyon Road. Pleasant ..."
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.gov",
+        "source_url": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "e on the Provo City YouTube channel: Provo City Planning Commission | July 8, 2026 Read the Agenda packet here: Agenda - Planning Commission August 12, 2026 Email your comments to dspublichearings@provo.gov. ➡️NEW RULES FOR BUILDING ALONG THE PROVO RIVER For the last 6 months the City Council and Provo Planning Department have been working on a plan to establish guidelines for buildi"
+      },
+      {
+        "field": "page_title",
+        "value": "Provo River Protections & More Townhomes - by Julie Rose",
+        "source_url": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Provo River Protections & More Townhomes - by Julie Rose"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.gov",
+        "source_url": "https://www.instagram.com/p/DbaxP82AQ1H/",
+        "source_type": "search_result",
+        "confidence": 0.4,
+        "evidence_text": "For full agenda details, go to provo.gov/ ... ... 2000 N Canyon Road. Pleasant View Neighborhood. Item 3 Tyson Reynolds ... email dspublichearings@provo.gov. Please submit public comment ..."
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": "Tyson Reynolds",
+    "contact_email": "dspublichearings@provo.gov",
+    "contact_phone": null,
+    "contact_source": "public_web",
+    "contact_confidence": 0.7,
+    "contact_is_public": true,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Jared Morgan": {
+    "applicant_name": "Jared Morgan",
+    "applicant_email": "mvandegraff@provo.gov",
+    "applicant_phone": "(801) 852-6408",
+    "company_name": null,
+    "company_website": null,
+    "company_source": null,
+    "email_confidence": 0.55,
+    "phone_confidence": 0.65,
+    "company_confidence": 0.0,
+    "enrichment_status": "enriched",
+    "search_query": "\"Jared Morgan\" \"113/191 N Geneva Road\" \"Fort Utah\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [
+      "mvandegraff@provo.gov"
+    ],
+    "phones_found": [
+      "(801) 852-6408"
+    ],
+    "websites_found": [],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan. Van De Graaff (801) 852-6408 mvandegraff@provo.gov ..."
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "mvandegraff@provo.gov",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.55,
+        "evidence_text": "Agenda - Planning Commission August 12, 2026 commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan. Van De Graaff (801) 852-6408 mvandegraff@provo.gov ..."
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6408",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.65,
+        "evidence_text": "Agenda - Planning Commission August 12, 2026 commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan. Van De Graaff (801) 852-6408 mvandegraff@provo.gov ..."
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": "Jared Morgan",
+    "contact_email": "mvandegraff@provo.gov",
+    "contact_phone": "(801) 852-6408",
+    "contact_source": "search_result",
+    "contact_confidence": 0.55,
+    "contact_is_public": true,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Kevin Jimenez": {
+    "applicant_name": "Kevin Jimenez",
+    "applicant_email": "hsalzl@provo.gov",
+    "applicant_phone": "(801) 852-6120",
+    "company_name": null,
+    "company_website": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0#contentarea",
+    "company_source": "public_web",
+    "email_confidence": 0.7,
+    "phone_confidence": 0.95,
+    "company_confidence": 0.6,
+    "enrichment_status": "enriched",
+    "search_query": "\"Kevin Jimenez\" \"1065 E Hillside Circle\" \"Sherwood Hills\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [
+      "hsalzl@provo.gov",
+      "dwright@provo.gov",
+      "mvandegraff@provo.gov",
+      "aardmore@provo.gov",
+      "snjohnson@provo.gov",
+      "dspublichearings@provo.gov",
+      "dspublichearings@provo.org",
+      "swilmoth@provo.org",
+      "nla@provo.gov"
+    ],
+    "phones_found": [
+      "(801) 852-6120",
+      "(801) 852-6423",
+      "(801) 852-6414",
+      "(801) 852-6408",
+      "(801) 852-6404",
+      "(801) 852-6417",
+      "(801) 852-6400",
+      "(801) 852-6424",
+      "(801) 852-6000",
+      "801-852-6424"
+    ],
+    "websites_found": [
+      "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0#contentarea",
+      "https://www.provo.gov/MyAccount/ProfileCreate",
+      "https://www.provo.gov/MyAccount",
+      "https://www.provo.gov/",
+      "https://www.provo.gov/27/Live",
+      "https://www.provo.gov/101/Work",
+      "https://www.provo.gov/31/Play",
+      "https://www.provo.gov/35/City",
+      "https://www.provo.gov/9/I-Want-To",
+      "https://www.provo.gov/Search/Results",
+      "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+      "https://www.provo.gov/Calendar.aspx?EID=1914&month=8&year=2026&day=5&calType=0",
+      "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0#arrowLeftPreviousFeaturedItem",
+      "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0#arrowRightNextFeaturedItem",
+      "https://www.provo.gov/calendar.aspx?view=list&year=2026&month=8&CID=0",
+      "https://www.provo.gov/calendar.aspx?view=week&year=2026&month=8&day=5&CID=0",
+      "https://www.provo.gov/calendar.aspx?view=month&year=2026&month=8&CID=0",
+      "https://www.provo.gov/Facilities",
+      "https://www.provo.gov/list.aspx?Mode=Subscribe#calendar",
+      "https://www.provo.gov/calendar.aspx?PREVIEW=YES&EID=1987",
+      "https://www.provo.gov/common/modules/iCalendar/iCalendar.aspx?feed=calendar&eventID=1987",
+      "https://www.provo.gov/rss.aspx#calendar",
+      "http://maps.google.com/maps?q=, Provo, UT 84601",
+      "http://maps.live.com/default.aspx?where1=, Provo, UT 84601",
+      "http://agendas.provo.gov/",
+      "https://www.provo.gov/cdn-cgi/l/email-protection",
+      "https://www.provo.gov/cdn-cgi/l/email-protection#284c5b585d4a44414b404d495a41464f5b68585a475e47064f475e",
+      "https://www.provo.gov/DocumentCenter/View/10145",
+      "https://www.provo.gov/181/City-Utilities",
+      "https://www.provo.gov/provoairport",
+      "https://www.provo.gov/SeeClickFix",
+      "https://www.provo.gov/workdayjobboard",
+      "https://www.provo.gov/QuickLinks.aspx?CID=15",
+      "https://www.provo.gov/Calendar.aspx",
+      "https://www.provo.gov/CivicAlerts.aspx",
+      "https://www.provo.gov/FAQ.aspx",
+      "https://www.provo.gov/list.aspx",
+      "https://www.provo.gov/215/Report-An-Issue",
+      "https://www.provo.gov/QuickLinks.aspx?CID=16",
+      "https://www.provo.gov/sitemap",
+      "https://www.provo.gov/directory.aspx",
+      "https://www.provo.gov/site/privacy",
+      "https://www.provo.gov/site/accessibility",
+      "https://connect.civicplus.com/referral",
+      "https://www.utah.gov/pmn/sitemap/notice/1098231.html#main-content",
+      "https://www.utah.gov/registration/",
+      "https://secured.utah.gov/faq/Forms/Page/faq/faq-home/0",
+      "https://www.utah.gov/support/index.html",
+      "https://www.utah.gov/pmn/",
+      "https://www.utah.gov/pmn/sitemap/publicbody/1662.html",
+      "https://www.utah.gov/pmn/sitemap/notice/1098231.html#subscribeByEmailSection",
+      "https://www.utah.gov/pmn/sitemap/noticeical/1098231.ics",
+      "http://maps.apple.com/maps?q=445 W Center St+Provo+UT+84601",
+      "http://maps.google.com/maps?q=445 W Center St+Provo+UT+84601",
+      "https://www.utah.gov/pmn/files/1467385.pdf",
+      "https://www.utah.gov/pmn/files/1469341.pdf",
+      "https://www.utah.gov/pmn/files/1470725.pdf",
+      "https://www.utah.gov/pmn/sitemap/noticehistory/335981.html",
+      "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+      "https://www.utah.gov/pmn/search.html",
+      "https://secure.utah.gov/pmn-admin/",
+      "https://www.utah.gov/pmn/about.html",
+      "https://www.utah.gov/pmn/help.html",
+      "https://le.utah.gov/xcode/Title52/Chapter4/52-4-S103.html",
+      "https://openrecords.utah.gov/",
+      "https://le.utah.gov/xcode/Title63G/Chapter2/63G-2-S201.html",
+      "https://www.utah.gov/pmn/sitemap/notice/1098231.html"
+    ],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "***CONTINUED*** Kevin Jimenez requests a Variance to Provo City Code 15.05. ... 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "... 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan ..."
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6120",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "pal Council. Council agendas can be viewed at the Provo City Council web site on the Thursday prior to the Council meeting at http://agendas.provo.gov . For more information, call (801) 852-6120. Unmarked items are administrative and require the approval only of the Planning Commission. Decisions on the unmarked items may be appealed to the Board of Adjustment by making a"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6423",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "gs * Item 1 Development Services requests an Ordinance Text Amendment to Provo City Code 14.34.290 to add Provo River Design Corridor standards. Citywide Application. Hannah Salzl (801) 852-6423 [email protected] PLOTA20260371 * Item 2 Tyson Reynolds requests approval of a Zone Map Amendment from the R1,6 (One Family Residential) Zone to the LDR (Low Density Residential)"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6414",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "dential) Zone to the LDR (Low Density Residential) Zone in order to create a 33-unit townhome development, located at 2000 N Canyon Road. Pleasant View Neighborhood. Dustin Wright (801) 852-6414 PLRZ20260116 Item 3 Tyson Reynolds requests Concept Plan approval for a 33-unit townhome development in a proposed LDR (Low Density Residential) Zone, located at 2000 N Canyon Roa"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6408",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "MU (Mixed-Use) Zone to entitle a mixed-use development containing 18 townhomes and commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan Van De Graaff (801) 852-6408 [email protected] PLRZ20260264 Item 5 Jared Morgan requests Concept Plan approval for a mixed-use development containing 18 townhomes and commercial space in a proposed MU (Mixed-"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6404",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "[email protected] PLCP20260261 * Item 6 Development Services requests an Ordinance Text Amendment to replace Title 14 (Provo City Zoning Code). Citywide Application. Aaron Ardmore (801) 852-6404 [email protected] PLOTA20260414 Item 7 ***CONTINUED*** Kevin Jimenez requests a Variance to Provo City Code 15.05.160 (Hillside Development Standards) to allow grading and the bui"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6417",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "building of a single-family home on slopes 30% or greater in the R1.10 (One Family Residential) Zone, located at 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 [email protected] PLVAR20260373 Item 8 Bret Nelson requests Project Plan approval for a 7-unit flex office development in the MP (Manufacturing Park) Zone, located at 1722 West 82"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6400",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "ns for all citizens interested in participating in this meeting. If assistance is needed to allow participation at this meeting, please call the Development Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Agenda Packet - Planning Commis"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6424",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "elopment Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Agenda Packet - Planning Commission 08.12.26 (PDF) Live Edit Utilities Fly Provo Business & Innovation Hub Explore & Enjoy Share Feedback or Concerns Join Our Team exceptional car"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6000",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "are Feedback or Concerns Join Our Team exceptional care for an exceptional community Contact Us City of Provo City Hall 445 W Center St Suite 500 Provo, UT 84601 Customer Service: (801) 852-6000 Quick Links Community Events Community News FAQs Notifications Report an Issue /QuickLinks.aspx Site Links Home Site Map Contact Us Privacy Policy Accessibility /QuickLinks.aspx G"
+      },
+      {
+        "field": "page_title",
+        "value": "Calendar • Planning Commission - August 12, 2026",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Calendar • Planning Commission - August 12, 2026"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "hsalzl@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "elopment Services requests an Ordinance Text Amendment to Provo City Code 14.34.290 to add Provo River Design Corridor standards. Citywide Application. Hannah Salzl (801) 852-6423 hsalzl@provo.gov PLOTA20260371 * Item 2 Tyson Reynolds requests approval of a Zone Map Amendment from the R1,6 (One Family Residential) Zone to the LDR (Low Density Residential) Zone in order to c"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dwright@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "proval for a 33-unit townhome development in a proposed LDR (Low Density Residential) Zone, located at 2000 N Canyon Road. Pleasant View Neighborhood. Dustin Wright (801) 852-6414 dwright@provo.gov PLCP20260117 * Item 4 Jared Morgan requests a Zone Map Amendment from the CG (General Commercial) Zone to the MU (Mixed-Use) Zone to entitle a mixed-use development containing 18"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "mvandegraff@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "Zone to entitle a mixed-use development containing 18 townhomes and commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan Van De Graaff (801) 852-6408 mvandegraff@provo.gov PLRZ20260264 Item 5 Jared Morgan requests Concept Plan approval for a mixed-use development containing 18 townhomes and commercial space in a proposed MU (Mixed-Use) Zone, located"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "aardmore@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ov PLCP20260261 * Item 6 Development Services requests an Ordinance Text Amendment to replace Title 14 (Provo City Zoning Code). Citywide Application. Aaron Ardmore (801) 852-6404 aardmore@provo.gov PLOTA20260414 Item 7 ***CONTINUED*** Kevin Jimenez requests a Variance to Provo City Code 15.05.160 (Hillside Development Standards) to allow grading and the building of a single-"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "snjohnson@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ingle-family home on slopes 30% or greater in the R1.10 (One Family Residential) Zone, located at 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan approval for a 7-unit flex office development in the MP (Manufacturing Park) Zone, located at 1722 West 820 North. Grandview"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "formal presentation of items, public comment and actions will be reserved for the public hearing at 6:00 PM. To send public comments to Planning Commission members, email them at dspublichearings@provo.gov. Please submit public comment emails before 6:00 PM the day before the hearing. Additional information can be found at provo.gov/publiccomments. Copies of the agenda materials, pu"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.org",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ticipation Not applicable Meeting Information Meeting Location 445 W Center St Provo, UT 84601 Show in Apple Maps Show in Google Maps Contact Name Planning Secretary Contact Email dspublichearings@provo.org Notice Posting Details Notice Posted On July 29, 2026 03:22 PM Notice Last Edited On August 06, 2026 09:31 AM Download Attachments Download Attachments File Name Category Date Add"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "swilmoth@provo.org",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ation Handout 2026/08/06 09:31 AM Show Notice Revision History Notice Revision History Notice Revision History Revision Number Notice Edited On Edited By 2 August 6, 2026 09:31 AM swilmoth@provo.org 1 August 4, 2026 08:26 AM swilmoth@provo.org Board/Committee Contacts Board/Committee Contacts Member Email Phone Nga La nla@provo.gov N/A Subscribe Subscribe by Email Subscriptio"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "nla@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "On Edited By 2 August 6, 2026 09:31 AM swilmoth@provo.org 1 August 4, 2026 08:26 AM swilmoth@provo.org Board/Committee Contacts Board/Committee Contacts Member Email Phone Nga La nla@provo.gov N/A Subscribe Subscribe by Email Subscription options will send you alerts regarding future notices posted by this Body. Your Name Your Email Subscribe Public Notice Website Home"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6120",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "ipal Council. Council agendas can be viewed at the Provo City Council web site on the Thursday prior to the Council meeting at http://agendas.provo.gov. For more information, call (801) 852-6120. Unmarked items are administrative and require the approval only of the Planning Commission. Decisions on the unmarked items may be appealed to the Board of Adjustment by making a"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6423",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "gs * Item 1 Development Services requests an Ordinance Text Amendment to Provo City Code 14.34.290 to add Provo River Design Corridor standards. Citywide Application. Hannah Salzl (801) 852-6423 hsalzl@provo.gov PLOTA20260371 * Item 2 Tyson Reynolds requests approval of a Zone Map Amendment from the R1,6 (One Family Residential) Zone to the LDR (Low Density Residential) Z"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6414",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "dential) Zone to the LDR (Low Density Residential) Zone in order to create a 33-unit townhome development, located at 2000 N Canyon Road. Pleasant View Neighborhood. Dustin Wright (801) 852-6414 PLRZ20260116 Item 3 Tyson Reynolds requests Concept Plan approval for a 33-unit townhome development in a proposed LDR (Low Density Residential) Zone, located at 2000 N Canyon Roa"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6408",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "MU (Mixed-Use) Zone to entitle a mixed-use development containing 18 townhomes and commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan Van De Graaff (801) 852-6408 mvandegraff@provo.gov PLRZ20260264 Item 5 Jared Morgan requests Concept Plan approval for a mixed-use development containing 18 townhomes and commercial space in a proposed MU (Mi"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6404",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "degraff@provo.gov PLCP20260261 * Item 6 Development Services requests an Ordinance Text Amendment to replace Title 14 (Provo City Zoning Code). Citywide Application. Aaron Ardmore (801) 852-6404 aardmore@provo.gov PLOTA20260414 Item 7 ***CONTINUED*** Kevin Jimenez requests a Variance to Provo City Code 15.05.160 (Hillside Development Standards) to allow grading and the bu"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6417",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "building of a single-family home on slopes 30% or greater in the R1.10 (One Family Residential) Zone, located at 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan approval for a 7-unit flex office development in the MP (Manufacturing Park) Zone, located at 1722 West"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6400",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "ns for all citizens interested in participating in this meeting. If assistance is needed to allow participation at this meeting, please call the Development Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Notice of Special Accommodation"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6424",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "elopment Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Notice of Special Accommodations (ADA) NOTICE OF SPECIAL ACCOMMODATION DURING PUBLIC MEETINGS In compliance with the Americans with Disabilities Act, individuals needing special a"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "801-852-6424",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "mericans with Disabilities Act, individuals needing special accommodations (including auxiliary communicative aids and services) during this meeting should notify Sandy Wilmoth at 801-852-6424. Notice of Electronic or Telephone Participation Not applicable Meeting Information Meeting Location 445 W Center St Provo, UT 84601 Show in Apple Maps Show in Google Maps Contact"
+      },
+      {
+        "field": "page_title",
+        "value": "Notice | Public Notice Website",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Notice | Public Notice Website"
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": "Kevin Jimenez",
+    "contact_email": "hsalzl@provo.gov",
+    "contact_phone": "(801) 852-6120",
+    "contact_source": "public_web",
+    "contact_confidence": 0.7,
+    "contact_is_public": true,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Bret Nelson": {
+    "applicant_name": "Bret Nelson",
+    "applicant_email": "hsalzl@provo.gov",
+    "applicant_phone": "(801) 852-6120",
+    "company_name": null,
+    "company_website": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html#main-content",
+    "company_source": "public_web",
+    "email_confidence": 0.7,
+    "phone_confidence": 0.95,
+    "company_confidence": 0.6,
+    "enrichment_status": "enriched",
+    "search_query": "\"Bret Nelson\" \"1722 West 820 North\" \"Grandview South\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [
+      "hsalzl@provo.gov",
+      "dwright@provo.gov",
+      "mvandegraff@provo.gov",
+      "aardmore@provo.gov",
+      "snjohnson@provo.gov",
+      "dspublichearings@provo.gov",
+      "dspublichearings@provo.org",
+      "nla@provo.gov",
+      "council@provo.gov"
+    ],
+    "phones_found": [
+      "(801) 852-6120",
+      "(801) 852-6423",
+      "(801) 852-6414",
+      "(801) 852-6408",
+      "(801) 852-6404",
+      "(801) 852-6417",
+      "(801) 852-6400",
+      "(801) 852-6424",
+      "801-852-6424"
+    ],
+    "websites_found": [
+      "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html#main-content",
+      "https://www.utah.gov/registration/",
+      "https://secured.utah.gov/faq/Forms/Page/faq/faq-home/0",
+      "https://www.utah.gov/support/index.html",
+      "https://www.utah.gov/pmn/",
+      "https://www.utah.gov/pmn/sitemap/publicbody/1662.html",
+      "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+      "http://maps.apple.com/maps?q=445 W Center St+Provo+UT+84601",
+      "http://maps.google.com/maps?q=445 W Center St+Provo+UT+84601",
+      "https://www.utah.gov/pmn/files/1467385.pdf",
+      "https://www.utah.gov/pmn/search.html",
+      "https://secure.utah.gov/pmn-admin/",
+      "https://www.utah.gov/pmn/about.html",
+      "https://www.utah.gov/pmn/help.html",
+      "https://le.utah.gov/xcode/Title52/Chapter4/52-4-S103.html",
+      "https://openrecords.utah.gov/",
+      "https://le.utah.gov/xcode/Title63G/Chapter2/63G-2-S201.html",
+      "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html"
+    ],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "(Manufacturing Park) Zone, located at 1722 West 820 North. Grandview South Neighborhood. Page 2. PROVO CITY CORPORATION. DEVELOPMENT SERVICES ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "... 1722 West 820 North. Grandview South Neighborhood. Dustin Wright (801) 852-6414 dwright@provo.gov PLPPA20250700 Preceding the public hearing ..."
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "hsalzl@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "elopment Services requests an Ordinance Text Amendment to Provo City Code 14.34.290 to add Provo River Design Corridor standards. Citywide Application. Hannah Salzl (801) 852-6423 hsalzl@provo.gov PLOTA20260371 * Item 2 Tyson Reynolds requests approval of a Zone Map Amendment from the R1,6 (One Family Residential) Zone to the LDR (Low Density Residential) Zone in order to c"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dwright@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "proval for a 33-unit townhome development in a proposed LDR (Low Density Residential) Zone, located at 2000 N Canyon Road. Pleasant View Neighborhood. Dustin Wright (801) 852-6414 dwright@provo.gov PLCP20260117 * Item 4 Jared Morgan requests a Zone Map Amendment from the CG (General Commercial) Zone to the MU (Mixed-Use) Zone to entitle a mixed-use development containing 18"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "mvandegraff@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "Zone to entitle a mixed-use development containing 18 townhomes and commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan Van De Graaff (801) 852-6408 mvandegraff@provo.gov PLRZ20260264 Item 5 Jared Morgan requests Concept Plan approval for a mixed-use development containing 18 townhomes and commercial space in a proposed MU (Mixed-Use) Zone, located"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "aardmore@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ov PLCP20260261 * Item 6 Development Services requests an Ordinance Text Amendment to replace Title 14 (Provo City Zoning Code). Citywide Application. Aaron Ardmore (801) 852-6404 aardmore@provo.gov PLOTA20260414 Item 7 Kevin Jimenez requests a Variance to Provo City Code 15.05.160 (Hillside Development Standards) to allow grading and the building of a single-family home on s"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "snjohnson@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ingle-family home on slopes 30% or greater in the R1.10 (One Family Residential) Zone, located at 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan approval for a 7-unit flex office development in the MP (Manufacturing Park) Zone, located at 1722 West 820 North. Grandview"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "formal presentation of items, public comment and actions will be reserved for the public hearing at 6:00 PM. To send public comments to Planning Commission members, email them at dspublichearings@provo.gov. Please submit public comment emails before 6:00 PM the day before the hearing. Additional information can be found at provo.gov/publiccomments. Copies of the agenda materials, pu"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "dspublichearings@provo.org",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "ticipation Not applicable Meeting Information Meeting Location 445 W Center St Provo, UT 84601 Show in Apple Maps Show in Google Maps Contact Name Planning Secretary Contact Email dspublichearings@provo.org Notice Posting Details Notice Posted On July 29, 2026 03:22 PM Notice Last Edited On August 04, 2026 08:26 AM Download Attachments Download Attachments File Name Category Date Add"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "nla@provo.gov",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.7,
+        "evidence_text": "s File Name Category Date Added Agenda - PC 08.12.26.pdf Public Information Handout 2026/07/29 03:22 PM Board/Committee Contacts Board/Committee Contacts Member Email Phone Nga La nla@provo.gov N/A Back to Current Notice Public Notice Website Home Search Administrative Login Resources About Help Definitions Government Type : A categorization of government entities, inclu"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6120",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "ipal Council. Council agendas can be viewed at the Provo City Council web site on the Thursday prior to the Council meeting at http://agendas.provo.gov. For more information, call (801) 852-6120. Unmarked items are administrative and require the approval only of the Planning Commission. Decisions on the unmarked items may be appealed to the Board of Adjustment by making a"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6423",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "gs * Item 1 Development Services requests an Ordinance Text Amendment to Provo City Code 14.34.290 to add Provo River Design Corridor standards. Citywide Application. Hannah Salzl (801) 852-6423 hsalzl@provo.gov PLOTA20260371 * Item 2 Tyson Reynolds requests approval of a Zone Map Amendment from the R1,6 (One Family Residential) Zone to the LDR (Low Density Residential) Z"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6414",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "dential) Zone to the LDR (Low Density Residential) Zone in order to create a 33-unit townhome development, located at 2000 N Canyon Road. Pleasant View Neighborhood. Dustin Wright (801) 852-6414 PLRZ20260116 Item 3 Tyson Reynolds requests Concept Plan approval for a 33-unit townhome development in a proposed LDR (Low Density Residential) Zone, located at 2000 N Canyon Roa"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6408",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "MU (Mixed-Use) Zone to entitle a mixed-use development containing 18 townhomes and commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan Van De Graaff (801) 852-6408 mvandegraff@provo.gov PLRZ20260264 Item 5 Jared Morgan requests Concept Plan approval for a mixed-use development containing 18 townhomes and commercial space in a proposed MU (Mi"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6404",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "degraff@provo.gov PLCP20260261 * Item 6 Development Services requests an Ordinance Text Amendment to replace Title 14 (Provo City Zoning Code). Citywide Application. Aaron Ardmore (801) 852-6404 aardmore@provo.gov PLOTA20260414 Item 7 Kevin Jimenez requests a Variance to Provo City Code 15.05.160 (Hillside Development Standards) to allow grading and the building of a sing"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6417",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "building of a single-family home on slopes 30% or greater in the R1.10 (One Family Residential) Zone, located at 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan approval for a 7-unit flex office development in the MP (Manufacturing Park) Zone, located at 1722 West"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6400",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "ns for all citizens interested in participating in this meeting. If assistance is needed to allow participation at this meeting, please call the Development Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Notice of Special Accommodation"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "(801) 852-6424",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "elopment Services Department at (801) 852-6400 before 12:00 PM. the day before the meeting to make arrangements. By order of the Provo City Planning Commission Planning Secretary, (801) 852-6424 Notice of Special Accommodations (ADA) NOTICE OF SPECIAL ACCOMMODATION DURING PUBLIC MEETINGS In compliance with the Americans with Disabilities Act, individuals needing special a"
+      },
+      {
+        "field": "applicant_phone_candidate",
+        "value": "801-852-6424",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.95,
+        "evidence_text": "mericans with Disabilities Act, individuals needing special accommodations (including auxiliary communicative aids and services) during this meeting should notify Sandy Wilmoth at 801-852-6424. Notice of Electronic or Telephone Participation Not applicable Meeting Information Meeting Location 445 W Center St Provo, UT 84601 Show in Apple Maps Show in Google Maps Contact"
+      },
+      {
+        "field": "page_title",
+        "value": "Notice History | Public Notice Website",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Notice History | Public Notice Website"
+      },
+      {
+        "field": "applicant_email_candidate",
+        "value": "council@provo.gov",
+        "source_url": "https://www.instagram.com/p/DTBJhEEDrVD/",
+        "source_type": "search_result",
+        "confidence": 0.4,
+        "evidence_text": "to leave our city better than I found it. I truly believe we did ... Email feedback to council@provo.gov, and join us at 5:30pm at ... 1722 West 820 North. Grandview South Neighborhood. 7 days ago. OCR."
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": "Bret Nelson",
+    "contact_email": "hsalzl@provo.gov",
+    "contact_phone": "(801) 852-6120",
+    "contact_source": "public_web",
+    "contact_confidence": 0.7,
+    "contact_is_public": true,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  }
+}

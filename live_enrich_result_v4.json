@@ -1,0 +1,206 @@
+{
+  "Tyson Reynolds": {
+    "applicant_name": "Tyson Reynolds",
+    "applicant_email": null,
+    "applicant_phone": null,
+    "company_name": null,
+    "company_website": null,
+    "company_source": null,
+    "email_confidence": 0.0,
+    "phone_confidence": 0.0,
+    "company_confidence": 0.0,
+    "enrichment_status": "not_found",
+    "search_query": "\"Tyson Reynolds\" \"2000 N Canyon Road\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [],
+    "phones_found": [],
+    "websites_found": [],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/files/1264215.pdf",
+        "source_url": "https://www.utah.gov/pmn/files/1264215.pdf",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "intent of the developer (Tyson Reynolds) regarding the removal of the hillside behind our property. ... 2000 N Canyon Road. Pleasant View."
+      },
+      {
+        "field": "search_result",
+        "value": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_url": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "Developer Tyson Reynolds is asking the city to rezone 4 acres just north of Lavell Edwards Stadium (2000 N. Canyon Road) so he can build 9 ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "* Item 2 Tyson Reynolds requests approval of a Zone Map Amendment ... townhome development, located at 2000 N Canyon Road. Pleasant ..."
+      },
+      {
+        "field": "page_title",
+        "value": "Provo River Protections & More Townhomes - by Julie Rose",
+        "source_url": "https://provonotes.substack.com/p/provo-river-protections-and-more",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Provo River Protections & More Townhomes - by Julie Rose"
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": null,
+    "contact_email": null,
+    "contact_phone": null,
+    "contact_source": null,
+    "contact_confidence": 0.0,
+    "contact_is_public": false,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Jared Morgan": {
+    "applicant_name": "Jared Morgan",
+    "applicant_email": null,
+    "applicant_phone": null,
+    "company_name": null,
+    "company_website": null,
+    "company_source": null,
+    "email_confidence": 0.0,
+    "phone_confidence": 0.0,
+    "company_confidence": 0.0,
+    "enrichment_status": "not_found",
+    "search_query": "\"Jared Morgan\" \"113/191 N Geneva Road\" \"Fort Utah\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [],
+    "phones_found": [],
+    "websites_found": [],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "commercial space, located at 113/191 N Geneva Road. Fort Utah Neighborhood. Megan. Van De Graaff (801) 852-6408 mvandegraff@provo.gov ..."
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": null,
+    "contact_email": null,
+    "contact_phone": null,
+    "contact_source": null,
+    "contact_confidence": 0.0,
+    "contact_is_public": false,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Kevin Jimenez": {
+    "applicant_name": "Kevin Jimenez",
+    "applicant_email": null,
+    "applicant_phone": null,
+    "company_name": null,
+    "company_website": null,
+    "company_source": null,
+    "email_confidence": 0.0,
+    "phone_confidence": 0.0,
+    "company_confidence": 0.0,
+    "enrichment_status": "not_found",
+    "search_query": "\"Kevin Jimenez\" \"1065 E Hillside Circle\" \"Sherwood Hills\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [],
+    "phones_found": [],
+    "websites_found": [],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "***CONTINUED*** Kevin Jimenez requests a Variance to Provo City Code 15.05. ... 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "... 1065 E Hillside Circle. Sherwood Hills Neighborhood. Scott Johnson (801) 852-6417 snjohnson@provo.gov PLVAR20260373 Item 8 Bret Nelson requests Project Plan ..."
+      },
+      {
+        "field": "page_title",
+        "value": "Calendar • Planning Commission - August 12, 2026",
+        "source_url": "https://www.provo.gov/Calendar.aspx?EID=1987&month=8&year=2026&day=5&calType=0",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Calendar • Planning Commission - August 12, 2026"
+      },
+      {
+        "field": "page_title",
+        "value": "Notice | Public Notice Website",
+        "source_url": "https://www.utah.gov/pmn/sitemap/notice/1098231.html",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Notice | Public Notice Website"
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": null,
+    "contact_email": null,
+    "contact_phone": null,
+    "contact_source": null,
+    "contact_confidence": 0.0,
+    "contact_is_public": false,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  },
+  "Bret Nelson": {
+    "applicant_name": "Bret Nelson",
+    "applicant_email": null,
+    "applicant_phone": null,
+    "company_name": null,
+    "company_website": null,
+    "company_source": null,
+    "email_confidence": 0.0,
+    "phone_confidence": 0.0,
+    "company_confidence": 0.0,
+    "enrichment_status": "not_found",
+    "search_query": "\"Bret Nelson\" \"1722 West 820 North\" \"Grandview South\" contact OR email OR phone OR developer OR owner",
+    "emails_found": [],
+    "phones_found": [],
+    "websites_found": [],
+    "sources": [
+      {
+        "field": "search_result",
+        "value": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_url": "https://www.provo.gov/DocumentCenter/View/10128",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "(Manufacturing Park) Zone, located at 1722 West 820 North. Grandview South Neighborhood. Page 2. PROVO CITY CORPORATION. DEVELOPMENT SERVICES ..."
+      },
+      {
+        "field": "search_result",
+        "value": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "search_result",
+        "confidence": 0.3,
+        "evidence_text": "... 1722 West 820 North. Grandview South Neighborhood. Dustin Wright (801) 852-6414 dwright@provo.gov PLPPA20250700 Preceding the public hearing ..."
+      },
+      {
+        "field": "page_title",
+        "value": "Notice History | Public Notice Website",
+        "source_url": "https://www.utah.gov/pmn/sitemap/noticehistory/335323.html",
+        "source_type": "public_web",
+        "confidence": 0.35,
+        "evidence_text": "Notice History | Public Notice Website"
+      }
+    ],
+    "enrichment_method": "public_web",
+    "contact_name": null,
+    "contact_email": null,
+    "contact_phone": null,
+    "contact_source": null,
+    "contact_confidence": 0.0,
+    "contact_is_public": false,
+    "contact_is_verified": false,
+    "linkedin_url": null
+  }
+}
