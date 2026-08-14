@@ -266,6 +266,13 @@ def build_approval_action(opportunity: Mapping[str, Any]) -> dict[str, Any]:
 
     # ------------------------------------------------------------------
     # DENIED -- terminal outcome, explicit government-record language.
+    # A "denied" signal can describe a PAST submission cycle for this same
+    # application/property (e.g. a prior year's rezone request that was
+    # denied, referenced as background in a resubmission's staff report).
+    # When a hearing/future date is actually scheduled for the current
+    # cycle, the historical denial stays on record, but the action must
+    # reflect what is really next -- never claim no further government
+    # action is on record when a hearing/future date proves otherwise.
     # ------------------------------------------------------------------
     if dominant == "denied":
         event = _best_event(events, "denied")
@@ -302,6 +309,41 @@ def build_approval_action(opportunity: Mapping[str, Any]) -> dict[str, Any]:
                 + ", and an appeal is referenced in the record; follow up "
                 "with the responsible department regarding the appeal status."
             )
+        elif has_hearing:
+            action, action_type = _hearing_action(days)
+            denial_date = (event or {}).get("event_date")
+
+            result.approval_action = action
+            result.approval_action_type = action_type
+            result.approval_basis = BASIS_CONFIRMED
+            result.approval_confidence = _confidence_for_days(days)
+            result.approval_relevant_date = next_date
+            result.approval_reason = (
+                "Government record confirms the application was denied"
+                + (f" on {denial_date}" if denial_date else "")
+                + f"; a {_label_phrase(next_event_label)} is scheduled on "
+                f"{next_date}"
+                + (
+                    f" at {opportunity.get('next_project_time')}"
+                    if opportunity.get("next_project_time")
+                    else ""
+                )
+                + "."
+            )
+        elif has_future:
+            denial_date = (event or {}).get("event_date")
+
+            result.approval_action = "monitor the next decision"
+            result.approval_action_type = "monitoring"
+            result.approval_basis = BASIS_RECOMMENDATION
+            result.approval_confidence = CONFIDENCE_MEDIUM
+            result.approval_relevant_date = next_date
+            result.approval_reason = (
+                "Government record confirms the application was denied"
+                + (f" on {denial_date}" if denial_date else "")
+                + f"; a future project date is on record ({next_date}) but "
+                "it is not explicitly a hearing/decision event."
+            )
         else:
             result.approval_action = "no immediate action identified"
             result.approval_action_type = "none"
@@ -320,24 +362,61 @@ def build_approval_action(opportunity: Mapping[str, Any]) -> dict[str, Any]:
         return result.to_dict()
 
     # ------------------------------------------------------------------
-    # WITHDRAWN
+    # WITHDRAWN -- same past-cycle-vs-live-cycle reasoning as DENIED above.
     # ------------------------------------------------------------------
     if dominant == "withdrawn":
         event = _best_event(events, "withdrawn")
 
         result.approval_status = "withdrawn"
-        result.approval_action = "no immediate action identified"
-        result.approval_action_type = "none"
-        result.approval_basis = BASIS_CONFIRMED
-        result.approval_confidence = CONFIDENCE_HIGH
         result.approval_relevant_date = (event or {}).get("event_date")
         result.approval_evidence = (event or {}).get("evidence")
         result.approval_source = source_url
         result.approval_source_type = "friction_analysis"
-        result.approval_reason = (
-            "Government record indicates the application was withdrawn; "
-            "no further action is currently on record."
-        )
+
+        if has_hearing:
+            action, action_type = _hearing_action(days)
+            withdrawal_date = (event or {}).get("event_date")
+
+            result.approval_action = action
+            result.approval_action_type = action_type
+            result.approval_basis = BASIS_CONFIRMED
+            result.approval_confidence = _confidence_for_days(days)
+            result.approval_relevant_date = next_date
+            result.approval_reason = (
+                "Government record indicates the application was withdrawn"
+                + (f" on {withdrawal_date}" if withdrawal_date else "")
+                + f"; a {_label_phrase(next_event_label)} is scheduled on "
+                f"{next_date}"
+                + (
+                    f" at {opportunity.get('next_project_time')}"
+                    if opportunity.get("next_project_time")
+                    else ""
+                )
+                + "."
+            )
+        elif has_future:
+            withdrawal_date = (event or {}).get("event_date")
+
+            result.approval_action = "monitor the next decision"
+            result.approval_action_type = "monitoring"
+            result.approval_basis = BASIS_RECOMMENDATION
+            result.approval_confidence = CONFIDENCE_MEDIUM
+            result.approval_relevant_date = next_date
+            result.approval_reason = (
+                "Government record indicates the application was withdrawn"
+                + (f" on {withdrawal_date}" if withdrawal_date else "")
+                + f"; a future project date is on record ({next_date}) but "
+                "it is not explicitly a hearing/decision event."
+            )
+        else:
+            result.approval_action = "no immediate action identified"
+            result.approval_action_type = "none"
+            result.approval_basis = BASIS_CONFIRMED
+            result.approval_confidence = CONFIDENCE_HIGH
+            result.approval_reason = (
+                "Government record indicates the application was withdrawn; "
+                "no further action is currently on record."
+            )
 
         return result.to_dict()
 

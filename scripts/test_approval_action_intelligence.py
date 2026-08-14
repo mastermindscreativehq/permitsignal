@@ -13,6 +13,9 @@ Run from the project root:
     python -m scripts.test_approval_action_intelligence
 """
 
+from datetime import date
+from pathlib import Path
+
 from backend.app.services.approval_action_intelligence import (
     BASIS_CONFIRMED,
     BASIS_INFERRED,
@@ -21,6 +24,7 @@ from backend.app.services.approval_action_intelligence import (
     apply_approval_intelligence,
     build_approval_action,
 )
+from backend.app.services.pipeline_orchestrator import DEFAULT_PDF, run_pipeline
 
 
 def check(condition, label):
@@ -414,6 +418,207 @@ def main():
             "processed opportunity produces identical results (idempotent)",
         )
     )
+
+    # ------------------------------------------------------------------------
+    # Regression: a terminal friction signal (denied/withdrawn) can describe
+    # a PAST submission cycle for the same application, while the current
+    # cycle has its own live scheduled hearing or future date. The action
+    # must reflect what is actually next, not claim "no further government
+    # action is currently on record" when a hearing/future date proves
+    # otherwise. Mirrors the real production case: PLRZ20260264 (Jared
+    # Morgan) was denied on 2025-12-02 for a prior rezone request, but has
+    # its own public_hearing scheduled 2026-08-12.
+    # ------------------------------------------------------------------------
+    print("\n[Regression] Denied application with a newly scheduled hearing")
+
+    denied_with_hearing_opportunity = {
+        "application_number": "PLTEST0010",
+        "friction_signals": ["denied", "recommended_denial"],
+        "friction_events": [
+            {
+                "event_type": "denied",
+                "event_date": "2025-12-02",
+                "confidence": 0.95,
+                "evidence": "the request was ultimately denied by the Municipal Council on December 2, 2025.",
+            },
+        ],
+        "has_future_opportunity": True,
+        "next_project_date": "2026-08-12",
+        "next_project_event": "public_hearing",
+        "next_project_time": "6:00 PM",
+        "days_until_event": 11,
+        "source_url": "https://example.gov/agenda",
+    }
+
+    denied_with_hearing_result = build_approval_action(denied_with_hearing_opportunity)
+
+    results.append(
+        check(
+            denied_with_hearing_result["approval_status"] == "denied",
+            "Prior denial is still recorded as the historical status, not erased",
+        )
+    )
+    results.append(
+        check(
+            denied_with_hearing_result["approval_action"] == "prepare for hearing",
+            "A newly scheduled hearing produces a real next action, not "
+            "'no immediate action identified'",
+        )
+    )
+    results.append(
+        check(
+            "no further government action is currently on record"
+            not in (denied_with_hearing_result["approval_reason"] or ""),
+            "Reason never claims no further action is on record when a "
+            "hearing is actually scheduled",
+        )
+    )
+    results.append(
+        check(
+            "2026-08-12" in (denied_with_hearing_result["approval_reason"] or ""),
+            "Reason references the newly scheduled hearing date",
+        )
+    )
+    results.append(
+        check(
+            denied_with_hearing_result["approval_basis"] == BASIS_CONFIRMED,
+            "A labeled scheduled hearing is a confirmed government-record fact",
+        )
+    )
+
+    # ------------------------------------------------------------------------
+    print("\n[Regression] Denied application with a future non-hearing date")
+
+    denied_with_future_opportunity = {
+        "application_number": "PLTEST0011",
+        "friction_signals": ["denied"],
+        "friction_events": [
+            {
+                "event_type": "denied",
+                "event_date": "2025-12-02",
+                "confidence": 0.95,
+                "evidence": "the request was denied by the Municipal Council on December 2, 2025.",
+            },
+        ],
+        "has_future_opportunity": True,
+        "next_project_date": "2026-09-02",
+        "next_project_event": "future_project_event",
+        "days_until_event": 32,
+        "source_url": "https://example.gov/agenda",
+    }
+
+    denied_with_future_result = build_approval_action(denied_with_future_opportunity)
+
+    results.append(
+        check(
+            denied_with_future_result["approval_action"] == "monitor the next decision",
+            "A future non-hearing date after a denial produces monitoring, "
+            "not 'no immediate action identified'",
+        )
+    )
+    results.append(
+        check(
+            denied_with_future_result["approval_basis"] == BASIS_RECOMMENDATION,
+            "A future non-hearing date after a denial is a recommendation, "
+            "not a confirmed requirement",
+        )
+    )
+    results.append(
+        check(
+            "no further government action is currently on record"
+            not in (denied_with_future_result["approval_reason"] or ""),
+            "Reason never claims no further action is on record when a "
+            "future date is actually on record",
+        )
+    )
+
+    # ------------------------------------------------------------------------
+    print("\n[Regression] Withdrawn application with a newly scheduled hearing")
+
+    withdrawn_with_hearing_opportunity = {
+        "application_number": "PLTEST0012",
+        "friction_signals": ["withdrawn"],
+        "friction_events": [
+            {
+                "event_type": "withdrawn",
+                "event_date": "2025-10-01",
+                "confidence": 0.9,
+                "evidence": "the application was withdrawn by the applicant on October 1, 2025.",
+            },
+        ],
+        "has_future_opportunity": True,
+        "next_project_date": "2026-08-12",
+        "next_project_event": "public_hearing",
+        "next_project_time": "6:00 PM",
+        "days_until_event": 3,
+        "source_url": "https://example.gov/agenda",
+    }
+
+    withdrawn_with_hearing_result = build_approval_action(withdrawn_with_hearing_opportunity)
+
+    results.append(
+        check(
+            withdrawn_with_hearing_result["approval_status"] == "withdrawn",
+            "Prior withdrawal is still recorded as the historical status, not erased",
+        )
+    )
+    results.append(
+        check(
+            withdrawn_with_hearing_result["approval_action"] == "attend scheduled hearing",
+            "An imminent newly scheduled hearing (3 days) produces 'attend "
+            "scheduled hearing', not 'no immediate action identified'",
+        )
+    )
+    results.append(
+        check(
+            "no further action is currently on record"
+            not in (withdrawn_with_hearing_result["approval_reason"] or ""),
+            "Reason never claims no further action is on record when a "
+            "hearing is actually scheduled",
+        )
+    )
+
+    # ------------------------------------------------------------------------
+    print("\n[Regression] Real Provo packet: PLRZ20260264 resubmission after a prior denial")
+
+    if not Path(DEFAULT_PDF).exists():
+        print("Skipping real-packet section: PDF not present.")
+    else:
+        real_result = run_pipeline(
+            pdf_path=DEFAULT_PDF,
+            reference_date=date(2026, 8, 1),
+            live_enrichment=False,
+            sync_to_supabase=False,
+            verbose=False,
+        )
+
+        by_number = {o["application_number"]: o for o in real_result["opportunities"]}
+        morgan_rezone = by_number.get("PLRZ20260264")
+        morgan_concept = by_number.get("PLCP20260261")
+
+        for label, morgan in (("PLRZ20260264", morgan_rezone), ("PLCP20260261", morgan_concept)):
+            results.append(
+                check(
+                    bool(morgan) and morgan.get("has_future_opportunity") is True,
+                    f"Real packet sanity check: {label} still has a live future opportunity",
+                )
+            )
+            results.append(
+                check(
+                    bool(morgan)
+                    and "no further government action is currently on record"
+                    not in (morgan.get("approval_reason") or ""),
+                    f"Real packet: {label} (denied historically, but with a live scheduled "
+                    "hearing) never claims no further government action is on record",
+                )
+            )
+            results.append(
+                check(
+                    bool(morgan) and morgan.get("approval_action") != "no immediate action identified",
+                    f"Real packet: {label} gets a real next action, reflecting its live "
+                    "scheduled hearing, not the prior denial's terminal action",
+                )
+            )
 
     passed = sum(results)
     failed = len(results) - passed
