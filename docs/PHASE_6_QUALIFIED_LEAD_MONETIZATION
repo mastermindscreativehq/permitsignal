@@ -1,0 +1,191 @@
+# PermitSignal — Phase 6: Qualified Lead Preparation for Outreach & Monetization
+
+## Objective
+
+Prepare the qualified PermitSignal intelligence records for commercial outreach and monetization.
+
+Phase 6 converts the intelligence already produced by PermitSignal into actionable, commercially useful lead records.
+
+The system must answer:
+
+> WHO is the lead?
+> WHAT project/opportunity are they associated with?
+> WHAT problem or approval obstacle exists?
+> WHAT does PermitSignal know?
+> WHAT should be offered to them?
+> WHY should they be contacted?
+> WHAT is the appropriate next commercial action?
+
+Phase 6 prepares leads for outreach.
+
+It does NOT build the outreach automation itself.
+
+---
+
+## Existing System
+
+Phases 1–5 are complete.
+
+PermitSignal already provides:
+
+- live government discovery
+- document ingestion
+- PDF extraction
+- application extraction
+- opportunity generation
+- applicant/company enrichment
+- owner/person enrichment
+- friction intelligence
+- approval-action intelligence
+- lead qualification
+- priority scoring
+- Supabase persistence
+- API exposure
+- live frontend intelligence
+
+The frontend now consumes the live intelligence through the existing API.
+
+Do NOT rebuild any of these systems.
+
+---
+
+# Phase 6 Goal
+
+Create a reliable commercial-ready representation of qualified leads using the intelligence already produced by PermitSignal.
+
+A qualified lead should contain enough information for a human or later automation to understand:
+
+1. who should be contacted
+2. what project they are associated with
+3. what problem/opportunity was detected
+4. what PermitSignal recommends
+5. why the lead is commercially relevant
+6. what evidence supports the recommendation
+7. what action should happen next
+
+---
+
+# Step 1 — Audit Existing Lead Data
+
+Inspect the existing:
+
+- lead repository
+- opportunity builder
+- applicant enrichment
+- owner/person enrichment
+- approval-action intelligence
+- friction intelligence
+- API models
+- Supabase schema
+- frontend lead representation
+
+Determine exactly what commercial information already exists.
+
+Do NOT duplicate fields unnecessarily.
+
+Do NOT create a second lead model if the existing model can be extended safely.
+
+---
+
+# Step 2 — Define Commercial Lead Readiness
+
+Create a deterministic lead-readiness layer using existing evidence.
+
+The system should distinguish between:
+
+### QUALIFIED
+
+Enough evidence exists for a meaningful commercial opportunity.
+
+### PARTIALLY QUALIFIED
+
+The project/opportunity is valuable but important commercial information is missing.
+
+### NOT READY
+
+There is insufficient evidence to justify outreach.
+
+Do not fabricate missing information.
+
+---
+
+# Step 3 — Commercial Lead Profile
+
+For qualified records, expose structured information such as:
+
+### Lead Identity
+
+- application number
+- project
+- applicant/company
+- owner/person
+- relevant party
+- location
+
+### Opportunity
+
+- opportunity description
+- project need/problem
+- friction signals
+- approval status
+- approval action
+- recommended next step
+
+### Commercial Context
+
+Where supported by existing evidence:
+
+- likely decision-maker
+- decision-maker role
+- company/contact information
+- project relevance
+- reason for contacting
+- urgency
+- timing
+- lead priority
+
+### Evidence
+
+Retain:
+
+- source URL
+- source type
+- evidence text
+- confidence
+- relevant government/project source
+- enrichment source
+
+The commercial layer must remain evidence-backed.
+
+---
+
+# Step 4 — Contactability
+
+Determine whether a lead has usable contact information.
+
+Possible states:
+
+- direct person contact available
+- company contact available
+- public business contact available
+- no verified contact available
+
+Do not infer private contact information.
+
+Do not fabricate emails, phone numbers, names or roles.
+
+Publicly available information must retain its source.
+
+---
+
+# Step 5 — Outreach Readiness
+
+Create a deterministic readiness classification.
+
+For example:
+
+```text
+READY_FOR_OUTREACH
+NEEDS_CONTACT_ENRICHMENT
+NEEDS_MORE_PROJECT_EVIDENCE
+NOT_READY

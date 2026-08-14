@@ -1,0 +1,223 @@
+{
+  "name": "PermitSignal — Outreach Preparation (Phase 8)",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "PS-Out — Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 220],
+      "notes": "Configurable recurring trigger for outreach preparation. Defaults to once a day -- change the interval in this node's parameters. Deactivate this node (or the whole workflow) to stop scheduled runs; PS-Out — Manual Trigger still allows on-demand testing while deactivated.",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 24
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2",
+      "name": "PS-Out — Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 380],
+      "notes": "On-demand execution for testing outreach preparation without waiting for the schedule. Feeds the same downstream path as the schedule trigger.",
+      "parameters": {}
+    },
+    {
+      "id": "3",
+      "name": "PS-Out — Fetch Ready Leads",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "notes": "GET {{ $env.PERMITSIGNAL_API_URL }}/leads?commercial_readiness=READY_FOR_OUTREACH -- the existing Phase 4/6 retrieval boundary (backend/app/main.py), filtered to Phase 6's commercial_readiness classification. No lead selection/qualification logic is duplicated in n8n: the backend already decided which leads are commercially actionable (backend.app.services.commercial_lead_intelligence).",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.PERMITSIGNAL_API_URL }}/leads",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            { "name": "commercial_readiness", "value": "READY_FOR_OUTREACH" }
+          ]
+        },
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "4",
+      "name": "PS-Out — Split Ready Leads",
+      "type": "n8n-nodes-base.splitOut",
+      "typeVersion": 1,
+      "position": [680, 300],
+      "notes": "Fans the single /leads response out into one item per lead so each is prepared independently. A request failure upstream (no 'leads' array) simply produces zero items here rather than crashing the workflow.",
+      "parameters": {
+        "fieldToSplitOut": "leads",
+        "options": {}
+      }
+    },
+    {
+      "id": "5",
+      "name": "PS-Out — Not Yet Contacted",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "notes": "Only prepare outreach for leads still in a pre-outreach lifecycle stage (NEW/QUALIFIED/READY_FOR_OUTREACH -- see backend.app.services.outreach_intelligence). A lead already CONTACTED/REPLIED/ENGAGED/OPPORTUNITY/WON/LOST was already acted on by a controlled event and must not be re-prepared or re-surfaced as if it were new.",
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "not-contacted",
+              "leftValue": "={{ ['NEW', 'QUALIFIED', 'READY_FOR_OUTREACH'].includes($json.outreach_status) }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "PS-Out — Fetch Outreach Package",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1120, 300],
+      "notes": "GET {{ $env.PERMITSIGNAL_API_URL }}/leads/{application_number}/outreach -- the Phase 8 outreach-preparation boundary (backend/app/main.py). Returns the selected contact target, recommended channel, and a personalized message draft built only from real PermitSignal evidence (backend.app.services.outreach_intelligence). This call never sends anything -- it is preparation only.",
+      "parameters": {
+        "method": "GET",
+        "url": "={{ $env.PERMITSIGNAL_API_URL }}/leads/{{ $json.application_number }}/outreach",
+        "options": {
+          "timeout": 60000
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "7",
+      "name": "PS-Out — Has Usable Message",
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "notes": "outreach_intelligence.build_outreach_message() returns null when the lead has no usable email/phone -- never fabricates a contact to reach. Leads with no message are dropped here rather than surfaced to a human as if they were outreach-ready.",
+      "parameters": {
+        "conditions": {
+          "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+          "conditions": [
+            {
+              "id": "has-message",
+              "leftValue": "={{ $json.message !== null && $json.message !== undefined }}",
+              "rightValue": true,
+              "operator": { "type": "boolean", "operation": "equals" }
+            }
+          ],
+          "combinator": "and"
+        }
+      }
+    },
+    {
+      "id": "8",
+      "name": "PS-Out — Mark Outreach Prepared",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [1560, 220],
+      "notes": "POST {{ $env.PERMITSIGNAL_API_URL }}/leads/{application_number}/outreach/events {event: outreach_prepared} -- records that a draft was prepared for human review (outreach_status advances to READY_FOR_OUTREACH if it was still NEW/QUALIFIED). This does NOT send anything and does NOT require Supabase to already have this lead beyond what the pipeline already persisted.",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERMITSIGNAL_API_URL }}/leads/{{ $json.application_number }}/outreach/events",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { event: 'outreach_prepared', note: 'Prepared by n8n scheduled outreach-preparation workflow.' } }}",
+        "options": {
+          "timeout": 30000
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "9",
+      "name": "PS-Out — Build Review Summary",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1780, 220],
+      "notes": "Human/Controlled Approval step (CLAUDE.md Phase 8 section 11): this workflow ends here, at a structured item ready for a human to review and send through whatever channel they actually use (email client, CRM, LinkedIn, etc). Wire a notification node (Slack/Email/Sheet append) after this node for your own team -- none is included here since no such integration exists yet in this repo and one should not be invented. PermitSignal never sends outreach automatically. Once a human has actually sent the message, confirm it via: curl -X POST {{ $env.PERMITSIGNAL_API_URL }}/leads/{application_number}/outreach/events -H 'Content-Type: application/json' -d '{\"event\": \"outreach_sent\"}' -- see n8n/README.md.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "application_number", "value": "={{ $json.application_number }}" },
+            { "name": "recipient_name", "value": "={{ $json.contact?.name }}" },
+            { "name": "recipient_role", "value": "={{ $json.contact?.role }}" },
+            { "name": "recipient_company", "value": "={{ $json.contact?.company }}" },
+            { "name": "recipient_email", "value": "={{ $json.contact?.email }}" },
+            { "name": "recipient_phone", "value": "={{ $json.contact?.phone }}" },
+            { "name": "channel", "value": "={{ $json.channel }}" },
+            { "name": "message_subject", "value": "={{ $json.message?.subject }}" },
+            { "name": "message_body", "value": "={{ $json.message?.body }}" },
+            { "name": "commercial_readiness", "value": "={{ $json.commercial_readiness }}" },
+            { "name": "recommended_commercial_action", "value": "={{ $json.recommended_commercial_action }}" },
+            { "name": "commercial_action_reason", "value": "={{ $json.commercial_action_reason }}" },
+            { "name": "outreach_status", "value": "={{ $json.outreach_status }}" },
+            { "name": "next_action", "value": "Human review required. Once sent, POST /leads/{{ $json.application_number }}/outreach/events with {\"event\": \"outreach_sent\"}." }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "PS-Out — Schedule Trigger": {
+      "main": [
+        [{ "node": "PS-Out — Fetch Ready Leads", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Manual Trigger": {
+      "main": [
+        [{ "node": "PS-Out — Fetch Ready Leads", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Fetch Ready Leads": {
+      "main": [
+        [{ "node": "PS-Out — Split Ready Leads", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Split Ready Leads": {
+      "main": [
+        [{ "node": "PS-Out — Not Yet Contacted", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Not Yet Contacted": {
+      "main": [
+        [{ "node": "PS-Out — Fetch Outreach Package", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Fetch Outreach Package": {
+      "main": [
+        [{ "node": "PS-Out — Has Usable Message", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Has Usable Message": {
+      "main": [
+        [{ "node": "PS-Out — Mark Outreach Prepared", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Out — Mark Outreach Prepared": {
+      "main": [
+        [{ "node": "PS-Out — Build Review Summary", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

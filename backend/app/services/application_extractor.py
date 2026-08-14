@@ -89,6 +89,11 @@ APPLICATION_TYPES = [
     ("Conditional Use", r"conditional use"),
     ("Subdivision", r"\bsubdivision\b"),
     ("General Plan Amendment", r"general plan amendment"),
+    # Real Provo packets also phrase this as "General Plan Map Amendment"
+    # or "amendment to the General Plan Map" -- both distinct word orders
+    # from the base pattern above, not a different application category.
+    ("General Plan Amendment", r"general plan map amendment"),
+    ("General Plan Amendment", r"amendment to the general plan map"),
 ]
 
 

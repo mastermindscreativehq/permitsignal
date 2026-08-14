@@ -336,6 +336,21 @@ python -m scripts.test_lead_repository
 
 for Supabase lead-persistence changes. This test is network-free: it checks configuration detection and lead-to-row mapping directly, and exercises upsert_leads() against a fake Supabase client, never a real one.
 
+Run:
+
+python -m scripts.test_commercial_lead_intelligence
+
+for Phase 6 commercial-readiness/contactability changes.
+
+Run:
+
+python -m scripts.test_outreach_intelligence
+
+for Phase 8 outreach-lifecycle/contact-selection/message-generation
+changes. This test is network-free: it exercises outreach_intelligence
+directly with already-computed field shapes, never a real PDF or
+Supabase call.
+
 For production validation:
 
 python -m backend.app.services.pipeline_orchestrator --reference-date 2026-08-01
@@ -439,6 +454,61 @@ lead_repository.upsert_leads() must never assign a fabricated application_number
 Do not run schema DDL from application code. supabase/migrations/0001_create_leads_table.sql must be applied once via the Supabase SQL editor or `supabase db push` before sync_to_supabase=True can succeed.
 
 Status: implemented. backend/app/services/lead_repository.py is the only module permitted to talk to Supabase; pipeline_orchestrator only calls upsert_leads() through the same _import_service()/_first_callable() dispatch pattern used for every other service boundary.
+
+18C. Outreach & Monetization Lifecycle Integrity (Phase 8)
+
+backend.app.services.outreach_intelligence attaches outreach_status (the
+controlled lead lifecycle: NEW / QUALIFIED / READY_FOR_OUTREACH /
+CONTACTED / REPLIED / ENGAGED / OPPORTUNITY / WON / LOST) and the
+selected outreach contact/channel/message-draft fields to every
+already-qualified opportunity.
+
+outreach_status also serves as the commercial/revenue status --
+READY_FOR_OUTREACH is the point a qualified lead becomes sellable
+(PermitSignal's existing case-report PDF, backend.app.services.
+case_report_generator, is the deliverable); OPPORTUNITY/WON/LOST track
+the resulting deal. No separate monetization/commercial_status column
+was introduced.
+
+NEW/QUALIFIED/READY_FOR_OUTREACH are recomputed from commercial_
+readiness on every pipeline run, exactly like every other PermitSignal
+field. Once a lead reaches CONTACTED or later via a controlled event
+(outreach_intelligence.apply_outreach_event(), exposed as POST /leads/
+{application_number}/outreach/events), pipeline_orchestrator.
+advance_outreach_status() freezes it -- a pipeline rerun must never
+silently reset an in-progress or closed deal back to READY_FOR_OUTREACH.
+
+To make this possible, pipeline_orchestrator.run_pipeline() reads each
+application_number's prior persisted lead
+(_load_previous_leads_by_number()) before recomputing outreach fields:
+the pipeline's own previous JSON artifact (at output_path, default
+data/output/permitsignal_opportunities.json) is always consulted first;
+Supabase additionally overlays fresher state only when
+sync_to_supabase=True and configured. This is a deliberate, narrowly
+scoped exception to the "sync_to_supabase must not change any field"
+rule in 18B -- it affects ONLY the outreach_*/follow_up_* fields, never
+applications/opportunities identity, friction, dates, priority, contact,
+or approval-action fields, which remain byte-for-byte identical with or
+without --sync-supabase.
+
+outreach_contact_type/outreach_contact_reason never duplicate the
+underlying contact fields (owner_contact_*, applicant_email/phone,
+applicant_contact_*, contact_email/phone) -- they only record WHICH
+already-identified party was selected as the outreach target and why.
+resolve_outreach_contact() and build_outreach_message() are pure,
+read-time projections over existing evidence; a message is never
+prepared for a lead with no usable email/phone
+(build_outreach_message() returns None), and it never claims an
+approval/denial outcome, ownership, or relationship beyond what
+approval_reason/opportunity_reason/commercial_action_reason already
+state.
+
+Status: implemented and verified against real Supabase-backed data (see
+n8n/README.md's outreach-preparation workflow section): a real lead was
+advanced NEW -> READY_FOR_OUTREACH -> CONTACTED via the controlled event
+endpoint, then a full pipeline rerun with --sync-supabase against the
+same real Provo packet confirmed the lead stayed CONTACTED rather than
+being reset.
 
 19. Dependency Discipline
 

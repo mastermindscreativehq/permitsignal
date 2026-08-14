@@ -3,6 +3,7 @@ from pathlib import Path
 import pymupdf
 
 from backend.app.services.application_extractor import (
+    extract_application_type,
     extract_applications,
 )
 
@@ -420,6 +421,98 @@ def run_known_checks(
 
 
 # ============================================================
+# APPLICATION TYPE PHRASING REGRESSION CHECKS
+# ============================================================
+
+def check(condition, label):
+    if condition:
+        print(f"[PASS] {label}")
+        return True
+    print(f"[FAIL] {label}")
+    return False
+
+
+def run_application_type_regression_checks() -> bool:
+    """
+    Regression coverage for the real Provo failure where
+    extract_application_type() returned None for legitimate General Plan
+    Amendment applications because the government record used a different
+    word order than the original narrow pattern -- causing
+    pipeline_orchestrator to reject the entire containing document.
+    """
+
+    print()
+    print("=" * 80)
+    print("APPLICATION TYPE PHRASING REGRESSION CHECKS")
+    print("=" * 80)
+
+    results = []
+
+    # Real text from data/documents/_03112026-362.pdf (PLGPA20250235).
+    results.append(
+        check(
+            extract_application_type(
+                "Brixton Capital requests a General Plan Map Amendment from "
+                "the Commercial (C) designation to the Transit Oriented "
+                "Development (TOD) designation for 23 acres of land."
+            )
+            == "General Plan Amendment",
+            'Recognizes "General Plan Map Amendment" phrasing',
+        )
+    )
+
+    # Real text from data/documents/_07082026-406.pdf (PLGPA20260012).
+    results.append(
+        check(
+            extract_application_type(
+                "Eric Langvardt requests an amendment to the General Plan "
+                "Map to change the classification from Industrial (I) to "
+                "Mixed-Use (M) for 21.6 acres of land."
+            )
+            == "General Plan Amendment",
+            'Recognizes "amendment to the General Plan Map" phrasing',
+        )
+    )
+
+    # The original narrow phrasing must still match.
+    results.append(
+        check(
+            extract_application_type(
+                "requests a General Plan Amendment for the property."
+            )
+            == "General Plan Amendment",
+            'Still recognizes the original "General Plan Amendment" phrasing',
+        )
+    )
+
+    # Real text from data/documents/_05272026-389.pdf (PLGPA20260193): no
+    # recognizable amendment phrase is present at all. This must stay None
+    # -- inferring a type from the application_number prefix instead of
+    # the descriptive text would be fabrication, not extraction.
+    results.append(
+        check(
+            extract_application_type(
+                "Provo Public Works request adoption of the Storm Drain "
+                "Master Plan into the General Plan along with an "
+                "associated Impact Fee Facility Plan."
+            )
+            is None,
+            "Returns None (not a fabricated type) when no recognizable "
+            "phrase is present",
+        )
+    )
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print()
+    print(f"Checks passed: {passed}")
+    print(f"Checks failed: {failed}")
+
+    return failed == 0
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -506,10 +599,19 @@ def main():
         applications
     )
 
+    # --------------------------------------------------------
+    # 5. Application type phrasing regression checks
+    # --------------------------------------------------------
+
+    regression_passed = run_application_type_regression_checks()
+
     print()
     print("=" * 80)
     print("APPLICATION EXTRACTION TEST COMPLETE")
     print("=" * 80)
+
+    if not regression_passed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

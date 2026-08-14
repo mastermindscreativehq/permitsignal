@@ -1,0 +1,320 @@
+{
+  "name": "PermitSignal — Scheduled Government Discovery",
+  "nodes": [
+    {
+      "id": "1",
+      "name": "PS-Disc — Schedule Trigger",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.2,
+      "position": [240, 220],
+      "notes": "Configurable recurring trigger for live government discovery. Defaults to every 6 hours -- change the interval in this node's parameters (or via PERMITSIGNAL_DISCOVERY_CRON, see README) without touching any other node. Deactivate this node (or the whole workflow) to stop scheduled runs; PS-Disc — Manual Trigger still allows on-demand testing while deactivated.",
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "hours",
+              "hoursInterval": 6
+            }
+          ]
+        }
+      }
+    },
+    {
+      "id": "2",
+      "name": "PS-Disc — Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 380],
+      "notes": "On-demand execution for testing discovery without waiting for the schedule. Feeds the same downstream path as the schedule trigger.",
+      "parameters": {}
+    },
+    {
+      "id": "3",
+      "name": "PS-Disc — Build Discovery Request",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [460, 300],
+      "notes": "Builds the /discover/provo request body from environment variables so discovery controls are configurable without editing the workflow. All four fields map 1:1 to backend.app.main.DiscoverProvoRequest -- no invented parameters. Defaults: reference_date=today, live_enrichment=false, sync_to_supabase=true, dry_run=false (matching the API's own defaults).",
+      "parameters": {
+        "values": {
+          "string": [
+            {
+              "name": "reference_date",
+              "value": "={{ $env.DISCOVERY_REFERENCE_DATE || $now.toFormat('yyyy-MM-dd') }}"
+            }
+          ],
+          "boolean": [
+            {
+              "name": "live_enrichment",
+              "value": "={{ $env.DISCOVERY_LIVE_ENRICHMENT === 'true' }}"
+            },
+            {
+              "name": "sync_to_supabase",
+              "value": "={{ $env.DISCOVERY_SYNC_TO_SUPABASE !== 'false' }}"
+            },
+            {
+              "name": "dry_run",
+              "value": "={{ $env.DISCOVERY_DRY_RUN === 'true' }}"
+            }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "4",
+      "name": "PS-Disc — Discover Provo",
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [680, 300],
+      "notes": "POST {{ $env.PERMITSIGNAL_API_URL }}/discover/provo -- the existing Phase 2 live discovery boundary (backend/app/main.py). This single call performs live Provo government discovery (backend.app.collectors.provo), registry/idempotency filtering (document_registry), document download, and the full existing 7-stage pipeline (applicant/company enrichment, approval-action intelligence, commercial/qualified-lead intelligence, Supabase persistence) for every newly discovered packet. No discovery, extraction, enrichment, or persistence logic is duplicated in n8n. continueOnFail is enabled so a request failure (unreachable API, timeout, 5xx) produces an item this workflow can branch on instead of aborting the execution silently.",
+      "parameters": {
+        "method": "POST",
+        "url": "={{ $env.PERMITSIGNAL_API_URL }}/discover/provo",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ { reference_date: $json.reference_date, live_enrichment: $json.live_enrichment, sync_to_supabase: $json.sync_to_supabase, dry_run: $json.dry_run } }}",
+        "options": {
+          "timeout": 300000
+        }
+      },
+      "continueOnFail": true,
+      "alwaysOutputData": true
+    },
+    {
+      "id": "5",
+      "name": "PS-Disc — Classify Result",
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3,
+      "position": [900, 300],
+      "notes": "Routes on the actual /discover/provo response so n8n's execution history makes the outcome obvious at a glance: request failure (unreachable/timeout/5xx), malformed response (no status field), successful discovery with per-document pipeline errors, successful discovery with zero new records, or successful discovery with new records ingested. Registry/idempotency itself is decided entirely server-side (document_registry) -- this only classifies the response for visibility.",
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "outputKey": "request_failed",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "id": "req-failed",
+                    "leftValue": "={{ $json.error !== undefined && $json.error !== null }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "malformed",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "id": "no-status",
+                    "leftValue": "={{ $json.status === undefined }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "pipeline_errors",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "id": "has-errors",
+                    "leftValue": "={{ $json.status === 'success' && ($json.errors || []).length > 0 }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "outputKey": "zero_new",
+              "conditions": {
+                "options": { "caseSensitive": true, "leftValue": "", "typeValidation": "loose" },
+                "conditions": [
+                  {
+                    "id": "zero-new",
+                    "leftValue": "={{ $json.status === 'success' && ($json.new_total ?? 0) === 0 }}",
+                    "rightValue": true,
+                    "operator": { "type": "boolean", "operation": "equals" }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {
+          "fallbackOutput": "extra"
+        }
+      }
+    },
+    {
+      "id": "6",
+      "name": "PS-Disc — ERROR: Discovery API Request Failed",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1160, 40],
+      "notes": "Reached when the HTTP call to /discover/provo itself failed -- unreachable backend, timeout, connection refused, or a non-2xx status (including a 500 from an unhandled discovery exception, e.g. the Provo site or Playwright being unavailable). The real error is surfaced, never swallowed.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "error" },
+            { "name": "failure_type", "value": "api_request_failed" },
+            { "name": "run_at", "value": "={{ $now.toISO() }}" },
+            { "name": "error_message", "value": "={{ $json.error?.message || $json.error?.description || JSON.stringify($json.error) || 'Unknown error calling PermitSignal discovery API.' }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "7",
+      "name": "PS-Disc — ERROR: Malformed Discovery Response",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1160, 180],
+      "notes": "Reached when the API responded but the body has no 'status' field -- an unexpected response shape (e.g. a proxy/gateway page instead of the FastAPI JSON response). Treated as a distinct failure from a normal API error so a silent contract change is never mistaken for success.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "error" },
+            { "name": "failure_type", "value": "malformed_response" },
+            { "name": "run_at", "value": "={{ $now.toISO() }}" },
+            { "name": "error_message", "value": "Discovery API response had no 'status' field -- unexpected response shape." },
+            { "name": "raw_response", "value": "={{ JSON.stringify($json) }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "8",
+      "name": "PS-Disc — WARNING: Pipeline Errors During Ingestion",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1160, 320],
+      "notes": "Discovery itself succeeded, but one or more newly discovered packets failed during download/pipeline ingestion (discovery_orchestrator.ingest_document() catches per-document failures so one bad packet never aborts the batch). Surfaced as a warning, not a false success -- the errors array is the real per-document error list from the backend.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "warning" },
+            { "name": "failure_type", "value": "pipeline_errors" },
+            { "name": "run_at", "value": "={{ $now.toISO() }}" }
+          ],
+          "number": [
+            { "name": "discovered_total", "value": "={{ $json.discovered_total }}" },
+            { "name": "new_total", "value": "={{ $json.new_total }}" },
+            { "name": "new_packets", "value": "={{ $json.new_packets }}" },
+            { "name": "ingested_count", "value": "={{ ($json.ingested || []).length }}" },
+            { "name": "error_count", "value": "={{ ($json.errors || []).length }}" }
+          ],
+          "array": [
+            { "name": "errors", "value": "={{ $json.errors }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "9",
+      "name": "PS-Disc — SUCCESS: No New Records",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1160, 460],
+      "notes": "Discovery ran successfully and found nothing new -- the expected, common outcome on most scheduled runs once the registry is caught up. Distinguished from the new-records case so execution history doesn't look identical to a run that actually ingested something.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "success" },
+            { "name": "failure_type", "value": "" },
+            { "name": "run_at", "value": "={{ $now.toISO() }}" }
+          ],
+          "number": [
+            { "name": "discovered_total", "value": "={{ $json.discovered_total }}" },
+            { "name": "new_total", "value": "={{ $json.new_total }}" }
+          ],
+          "boolean": [
+            { "name": "dry_run", "value": "={{ $json.dry_run }}" }
+          ]
+        },
+        "options": {}
+      }
+    },
+    {
+      "id": "10",
+      "name": "PS-Disc — SUCCESS: New Records Found",
+      "type": "n8n-nodes-base.set",
+      "typeVersion": 2,
+      "position": [1160, 600],
+      "notes": "Discovery found new government packets with zero per-document pipeline errors. When dry_run=false (the production default), every new packet was already downloaded and run through the existing pipeline server-side (applicant/company enrichment, approval-action intelligence, commercial lead intelligence, Supabase persistence) -- ingested_count/ingested reflect the real outcome. When dry_run=true (manual testing), new records were discovered and registered but intentionally not ingested -- check the dry_run field before treating ingested_count as final. This node only surfaces real backend counts; it never duplicates the intelligence payload.",
+      "parameters": {
+        "values": {
+          "string": [
+            { "name": "status", "value": "success" },
+            { "name": "failure_type", "value": "" },
+            { "name": "run_at", "value": "={{ $now.toISO() }}" }
+          ],
+          "number": [
+            { "name": "discovered_total", "value": "={{ $json.discovered_total }}" },
+            { "name": "new_total", "value": "={{ $json.new_total }}" },
+            { "name": "new_packets", "value": "={{ $json.new_packets }}" },
+            { "name": "skipped_non_packet", "value": "={{ $json.skipped_non_packet }}" },
+            { "name": "ingested_count", "value": "={{ ($json.ingested || []).length }}" }
+          ],
+          "boolean": [
+            { "name": "dry_run", "value": "={{ $json.dry_run }}" }
+          ],
+          "array": [
+            { "name": "ingested", "value": "={{ $json.ingested }}" }
+          ]
+        },
+        "options": {}
+      }
+    }
+  ],
+  "connections": {
+    "PS-Disc — Schedule Trigger": {
+      "main": [
+        [{ "node": "PS-Disc — Build Discovery Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Disc — Manual Trigger": {
+      "main": [
+        [{ "node": "PS-Disc — Build Discovery Request", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Disc — Build Discovery Request": {
+      "main": [
+        [{ "node": "PS-Disc — Discover Provo", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Disc — Discover Provo": {
+      "main": [
+        [{ "node": "PS-Disc — Classify Result", "type": "main", "index": 0 }]
+      ]
+    },
+    "PS-Disc — Classify Result": {
+      "main": [
+        [{ "node": "PS-Disc — ERROR: Discovery API Request Failed", "type": "main", "index": 0 }],
+        [{ "node": "PS-Disc — ERROR: Malformed Discovery Response", "type": "main", "index": 0 }],
+        [{ "node": "PS-Disc — WARNING: Pipeline Errors During Ingestion", "type": "main", "index": 0 }],
+        [{ "node": "PS-Disc — SUCCESS: No New Records", "type": "main", "index": 0 }],
+        [{ "node": "PS-Disc — SUCCESS: New Records Found", "type": "main", "index": 0 }]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

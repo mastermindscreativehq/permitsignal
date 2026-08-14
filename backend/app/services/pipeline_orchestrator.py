@@ -9,7 +9,9 @@ Location:
 Pipeline:
     PDF -> application extraction -> friction analysis
         -> future project dates -> opportunity builder
-        -> applicant identity/enrichment -> sorted production queue
+        -> applicant identity/enrichment -> approval-action intelligence
+        -> lead qualification -> commercial lead intelligence
+        -> sorted production queue
 
 This file deliberately keeps service imports at runtime so the orchestrator
 can be unit-tested with mocked modules and so analyzer modules can live under
@@ -38,6 +40,9 @@ PROJECT_DATE_MODULE = "backend.app.services.project_date_extractor"
 OPPORTUNITY_MODULE = "backend.app.services.opportunity_builder"
 APPLICANT_IDENTITY_MODULE = "backend.app.services.applicant_identity"
 APPLICANT_ENRICHMENT_MODULE = "backend.app.services.applicant_enrichment"
+APPROVAL_INTELLIGENCE_MODULE = "backend.app.services.approval_action_intelligence"
+COMMERCIAL_INTELLIGENCE_MODULE = "backend.app.services.commercial_lead_intelligence"
+OUTREACH_INTELLIGENCE_MODULE = "backend.app.services.outreach_intelligence"
 LEAD_REPOSITORY_MODULE = "backend.app.services.lead_repository"
 
 
@@ -564,6 +569,25 @@ def _enrich_applicants(
                         item["phone_source"] = "government_record"
                         item["phone_confidence"] = 1.0
 
+                    # Owner/person enrichment (Phase 2): a distinct
+                    # real-world person (owner/principal/executive/
+                    # partner) discovered via public evidence is
+                    # ADDITIVE to any party already extracted directly
+                    # from the government document (application_extractor.
+                    # extract_parties()) -- appended, never replacing the
+                    # document-sourced list _merge_preserving_left() would
+                    # otherwise overwrite it with.
+                    discovered_parties = enrichment.get(
+                        "discovered_parties"
+                    )
+
+                    if discovered_parties:
+                        item["parties"] = list(
+                            item.get("parties") or []
+                        ) + list(discovered_parties)
+
+                    item.pop("discovered_parties", None)
+
             except Exception as exc:
                 item["enrichment_status"] = "error"
                 item["enrichment_error"] = str(exc)
@@ -573,6 +597,230 @@ def _enrich_applicants(
                 "enrichment_status",
                 "disabled",
             )
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
+# APPROVAL-ACTION INTELLIGENCE (Phase 3)
+# ============================================================================
+
+def _apply_approval_intelligence(
+    opportunities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Attach a conservative, evidence-first approval_status/approval_action
+    recommendation to each completed opportunity, using only fields already
+    computed by friction analysis, project-date extraction, and the current
+    agenda status -- never new text extraction. Purely additive: every
+    existing field (including owner/person enrichment from stage 6 above)
+    is preserved unchanged; only the approval_* fields are added.
+    """
+    module = _import_service(APPROVAL_INTELLIGENCE_MODULE)
+
+    batch_fn = _first_callable(
+        module,
+        "apply_approval_intelligence",
+    )
+
+    if batch_fn is not None:
+        try:
+            result = batch_fn(opportunities)
+
+            if isinstance(result, list):
+                return result
+        except TypeError:
+            pass
+
+    single_fn = _first_callable(
+        module,
+        "build_approval_action",
+    )
+
+    if single_fn is None:
+        raise PipelineError(
+            "approval_action_intelligence does not expose "
+            "apply_approval_intelligence() or build_approval_action()."
+        )
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+        approval = single_fn(item)
+
+        if isinstance(approval, dict):
+            item.update(approval)
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
+# COMMERCIAL LEAD INTELLIGENCE (Phase 6)
+# ============================================================================
+
+def _apply_commercial_intelligence(
+    opportunities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Attach commercial-readiness/contactability/recommended-action fields
+    (contactability_level, commercial_readiness, recommended_commercial_
+    action, commercial_action_reason) to each already-qualified
+    opportunity. Purely additive and must run after _qualify_leads(): it
+    re-labels lead_status/is_contactable rather than recomputing them.
+    Every existing field is preserved unchanged.
+    """
+    module = _import_service(COMMERCIAL_INTELLIGENCE_MODULE)
+
+    batch_fn = _first_callable(
+        module,
+        "apply_commercial_intelligence",
+    )
+
+    if batch_fn is not None:
+        try:
+            result = batch_fn(opportunities)
+
+            if isinstance(result, list):
+                return result
+        except TypeError:
+            pass
+
+    single_fn = _first_callable(
+        module,
+        "build_commercial_intelligence",
+    )
+
+    if single_fn is None:
+        raise PipelineError(
+            "commercial_lead_intelligence does not expose "
+            "apply_commercial_intelligence() or build_commercial_intelligence()."
+        )
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+        commercial = single_fn(item)
+
+        if isinstance(commercial, dict):
+            item.update(commercial)
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
+# OUTREACH & MONETIZATION INTELLIGENCE (Phase 8)
+# ============================================================================
+
+def _load_previous_leads_by_number(
+    sync_to_supabase: bool,
+    output_path: Path,
+) -> dict[str, dict[str, Any]]:
+    """
+    Load each application_number's prior persisted lead record, so
+    outreach_intelligence can carry forward outreach_status/
+    outreach_events/follow_up_required/last_outreach_at across pipeline
+    runs (see outreach_intelligence.advance_outreach_status()). Every
+    other field is still fully recomputed from scratch every run -- this
+    lookup exists solely to make the Phase 8 lifecycle fields
+    idempotent/non-regressive, not to change any other field's behavior.
+
+    Best-effort only: this must never fail or slow down the pipeline. The
+    pipeline's own previous JSON artifact (if present at output_path) is
+    always consulted first; Supabase (when sync_to_supabase=True and
+    configured) additionally overlays any fresher state, mirroring the
+    Supabase-primary/JSON-fallback convention used by GET /leads.
+    """
+    previous: dict[str, dict[str, Any]] = {}
+
+    try:
+        if output_path.exists():
+            existing = json.loads(output_path.read_text(encoding="utf-8"))
+
+            for lead in existing.get("opportunities", []) or []:
+                number = _normalize_application_number(lead.get("application_number"))
+
+                if number:
+                    previous[number] = lead
+    except Exception:
+        pass
+
+    if sync_to_supabase:
+        try:
+            module = _import_service(LEAD_REPOSITORY_MODULE)
+            is_configured_fn = getattr(module, "is_configured", None)
+
+            if callable(is_configured_fn) and is_configured_fn():
+                for lead in module.fetch_leads():
+                    number = _normalize_application_number(lead.get("application_number"))
+
+                    if number:
+                        previous[number] = lead
+        except Exception:
+            pass
+
+    return previous
+
+
+def _apply_outreach_intelligence(
+    opportunities: list[dict[str, Any]],
+    previous_by_number: dict[str, dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Attach outreach lifecycle/contact-target/message-draft fields
+    (outreach_status, outreach_qualification_status, outreach_channel,
+    outreach_contact_type, outreach_contact_reason,
+    outreach_message_subject/body, follow_up_required/reason,
+    last_outreach_at, outreach_events) to each already-qualified
+    opportunity. Purely additive and must run after
+    _apply_commercial_intelligence(): it re-labels commercial_readiness
+    rather than recomputing it. Every existing field is preserved
+    unchanged.
+    """
+    module = _import_service(OUTREACH_INTELLIGENCE_MODULE)
+
+    batch_fn = _first_callable(
+        module,
+        "apply_outreach_intelligence",
+    )
+
+    if batch_fn is not None:
+        try:
+            result = batch_fn(opportunities, previous_by_number)
+
+            if isinstance(result, list):
+                return result
+        except TypeError:
+            pass
+
+    single_fn = _first_callable(
+        module,
+        "build_outreach_intelligence",
+    )
+
+    if single_fn is None:
+        raise PipelineError(
+            "outreach_intelligence does not expose "
+            "apply_outreach_intelligence() or build_outreach_intelligence()."
+        )
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+        number = _normalize_application_number(item.get("application_number"))
+        previous = previous_by_number.get(number) if number else None
+        outreach = single_fn(item, previous)
+
+        if isinstance(outreach, dict):
+            item.update(outreach)
 
         results.append(item)
 
@@ -730,10 +978,14 @@ def _validate_opportunity(
             "missing applicant_name"
         )
 
-    if not record.get("application_type"):
-        errors.append(
-            "missing application_type"
-        )
+    # application_type is intentionally NOT validated as required: real
+    # government packets legitimately omit a recognizable type phrase for
+    # some agenda items (DEVELOPMENT_RULES.md Part 17 already documents
+    # retaining it "when available" as the standing contract, not "always
+    # present"). Every downstream stage already tolerates a null
+    # application_type -- failing the entire document's batch over one
+    # opportunity's unrecognized type phrase discarded otherwise-valid
+    # opportunities in real Provo packets.
 
     return errors
 
@@ -762,6 +1014,7 @@ def run_pipeline(
     reference_date: Optional[date] = None,
     live_enrichment: bool = False,
     sync_to_supabase: bool = False,
+    output_path: Path | str = DEFAULT_OUTPUT,
     verbose: bool = True,
 ) -> dict[str, Any]:
     """
@@ -781,6 +1034,12 @@ def run_pipeline(
     Supabase (see backend.app.services.lead_repository); a missing
     configuration or a genuine Supabase failure is recorded in
     metadata["supabase_sync"] rather than failing the run.
+
+    output_path identifies where this run's previous JSON artifact (if
+    any) is read from to carry forward Phase 8 outreach-lifecycle state
+    (see _load_previous_leads_by_number()) -- it does not, by itself,
+    cause this function to write anything; saving is run_and_save()'s
+    responsibility.
     """
     if reference_date is None:
         reference_date = date.today()
@@ -962,8 +1221,26 @@ def run_pipeline(
         live_enrichment=live_enrichment,
     )
 
+    completed_opportunities = _apply_approval_intelligence(
+        completed_opportunities
+    )
+
     completed_opportunities = _qualify_leads(
         completed_opportunities
+    )
+
+    completed_opportunities = _apply_commercial_intelligence(
+        completed_opportunities
+    )
+
+    previous_leads_by_number = _load_previous_leads_by_number(
+        sync_to_supabase,
+        Path(output_path),
+    )
+
+    completed_opportunities = _apply_outreach_intelligence(
+        completed_opportunities,
+        previous_leads_by_number,
     )
 
     # ------------------------------------------------------------------------
@@ -1098,6 +1375,7 @@ def run_and_save(
         reference_date=reference_date,
         live_enrichment=live_enrichment,
         sync_to_supabase=sync_to_supabase,
+        output_path=output_path,
         verbose=verbose,
     )
 

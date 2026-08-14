@@ -160,6 +160,212 @@ BUSINESS_DIRECTORY_DOMAINS = {
     "corporationwiki.com",
 }
 
+# ---------------------------------------------------------------------------
+# OWNER / PERSON ROLE DISCOVERY (Phase 2)
+#
+# Fixed vocabulary of ownership/principal-tier professional roles.
+# Deliberately excludes generic job titles ("manager", "associate") that do
+# not indicate a legitimately associated owner/principal/executive/partner
+# -- see CLAUDE.md section 6 (Contact Integrity Rules) and
+# docs/PHASE_2_OWNER_ENRICHMENT.md.
+# ---------------------------------------------------------------------------
+
+ROLE_LABELS: dict[str, str] = {
+    "owner": "Owner",
+    "sole proprietor": "Owner",
+    "principal": "Principal",
+    "president": "President",
+    "chief executive officer": "CEO",
+    "ceo": "CEO",
+    "managing member": "Managing Member",
+    "managing partner": "Managing Partner",
+    "managing director": "Managing Director",
+    "executive director": "Executive Director",
+    "partner": "Partner",
+    "co-founder": "Co-Founder",
+    "founder": "Founder",
+    "registered agent": "Registered Agent",
+    "responsible person": "Responsible Person",
+}
+
+# Longest phrase first, so "managing partner" is matched before the bare
+# "partner" it contains.
+_ROLE_PHRASES_SORTED = sorted(ROLE_LABELS.keys(), key=len, reverse=True)
+_ROLE_ALTERNATION = "|".join(re.escape(phrase) for phrase in _ROLE_PHRASES_SORTED)
+
+# Only two explicit, low-ambiguity syntactic forms are trusted for a
+# name/role pairing -- never a bare proximity/co-occurrence heuristic. This
+# keeps the false-positive rate low for what is ultimately an identity
+# claim ("this specific person is associated with this applicant/company").
+#
+#   "Jane Smith, Owner"           -> NAME_THEN_ROLE_RE
+#   "Owner: Jane Smith"           -> ROLE_THEN_NAME_RE
+#
+# The name token is deliberately NOT matched case-insensitively (only the
+# role alternation is, via the scoped inline (?i:...) group) -- matching
+# the whole pattern with re.IGNORECASE would let a lowercase word like
+# "team." satisfy "[A-Z]" and be captured as part of a person's name.
+# Periods are deliberately excluded from the token's own character class
+# for the same reason: including them let a token like "Doe." swallow the
+# sentence-ending period and the regex would then greedily continue
+# matching the capitalized first word of the NEXT sentence as a third
+# name token.
+_NAME_TOKEN = r"[A-Z][a-zA-Z'\-]+"
+_ROLE_CI = "(?i:" + _ROLE_ALTERNATION + ")"
+
+NAME_THEN_ROLE_RE = re.compile(
+    r"(?P<name>"
+    + _NAME_TOKEN
+    + r"(?:\s+"
+    + _NAME_TOKEN
+    + r"){1,2})\s*[,\-–—]\s*(?P<role>"
+    + _ROLE_CI
+    + r")\b"
+)
+
+ROLE_THEN_NAME_RE = re.compile(
+    r"\b(?P<role>"
+    + _ROLE_CI
+    + r")\b\s*[:\-–—]\s*(?P<name>"
+    + _NAME_TOKEN
+    + r"(?:\s+"
+    + _NAME_TOKEN
+    + r"){1,2})"
+)
+
+# A capitalized 2-3 word span that matches one of the syntactic forms above
+# is still rejected here when it is evidently a company/organization name
+# rather than a person (e.g. "Vance Builders LLC, Owner").
+NAME_STOPWORDS = {
+    "llc",
+    "inc",
+    "incorporated",
+    "corp",
+    "corporation",
+    "company",
+    "co",
+    "group",
+    "construction",
+    "development",
+    "developments",
+    "builders",
+    "realty",
+    "properties",
+    "partners",
+    "holdings",
+    "services",
+    "contact",
+    "about",
+    "team",
+    "home",
+    "website",
+    "visit",
+    "click",
+    "the",
+    "and",
+    "planning",
+    "commission",
+    "city",
+    "county",
+    "department",
+    "office",
+    "staff",
+    "agenda",
+    "hearing",
+    "management",
+    "asset",
+    "assets",
+    "capital",
+    "ventures",
+    "venture",
+    "enterprises",
+    "enterprise",
+    "investments",
+    "investment",
+    "trust",
+    "family",
+    "ranch",
+    "ranches",
+    "farms",
+    "land",
+    "resources",
+}
+
+
+def _looks_like_person_name(name: str) -> bool:
+    tokens = [token for token in name.strip().split() if token]
+
+    if len(tokens) < 2 or len(tokens) > 3:
+        return False
+
+    shouting_tokens = 0
+
+    for token in tokens:
+        bare = token.strip(".,'-").lower()
+
+        if not bare or bare in NAME_STOPWORDS:
+            return False
+
+        if any(char.isdigit() for char in token):
+            return False
+
+        if len(bare) >= 3 and token.isupper():
+            shouting_tokens += 1
+
+    if shouting_tokens >= 2:
+        # A person's name in ordinary prose is Title Case, not ALL CAPS
+        # across multiple words -- 2+ shouting-caps tokens is instead the
+        # hallmark of an entity/routing-table label (e.g. a "Property
+        # Owner: REYNOLDS ASSET MANAGEMENT" field), even when none of its
+        # individual words are in NAME_STOPWORDS.
+        return False
+
+    return True
+
+
+def find_role_person_mentions(text: str) -> list[tuple[str, str]]:
+    """
+    Conservative name+role extraction for owner/principal/executive/partner
+    discovery (see ROLE_LABELS). Returns deduplicated (name, canonical_role)
+    pairs found via the two trusted syntactic forms above. Never returns a
+    candidate whose "name" span looks like a company/organization name.
+    """
+
+    if not text:
+        return []
+
+    results: list[tuple[str, str]] = []
+    seen: set[tuple[str, str]] = set()
+
+    for pattern in (NAME_THEN_ROLE_RE, ROLE_THEN_NAME_RE):
+        for match in pattern.finditer(text):
+            name = clean_text(match.group("name"))
+            role_phrase = match.group("role").lower()
+            role = ROLE_LABELS.get(role_phrase)
+
+            if not role or not _looks_like_person_name(name):
+                continue
+
+            key = (name.lower(), role)
+
+            if key in seen:
+                continue
+
+            seen.add(key)
+            results.append((name, role))
+
+    return results
+
+
+def _confidence_label(value: float) -> str:
+    if value >= 0.80:
+        return "HIGH"
+
+    if value >= 0.55:
+        return "MEDIUM"
+
+    return "LOW"
+
 DEFAULT_HEADERS = {
     "User-Agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -203,6 +409,21 @@ class ApplicantEnrichment:
     phones_found: list[str] = field(default_factory=list)
     websites_found: list[str] = field(default_factory=list)
     sources: list[dict[str, Any]] = field(default_factory=list)
+
+    # Owner / Person enrichment (Phase 2). contact_role is the applicant's
+    # own professional role/relationship (e.g. "Owner", "Managing Partner")
+    # when public evidence ties that role to the applicant's own name.
+    # discovered_parties holds any DISTINCT real-world person (owner,
+    # principal, executive, partner, or other legitimately associated
+    # person) that public evidence ties to this applicant/company, in the
+    # same {party_name, party_role, party_company, party_contact_email,
+    # party_contact_phone, party_source, party_confidence} shape
+    # application_extractor.extract_parties() already uses -- never a
+    # parallel schema. Both stay at their evidence-backed default (None / [])
+    # when no reliable evidence exists; this is the correct, non-fabricated
+    # result, not an error.
+    contact_role: Optional[str] = None
+    discovered_parties: list[dict[str, Any]] = field(default_factory=list)
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -880,6 +1101,162 @@ class ApplicantEnricher:
                 ).to_dict()
             )
 
+        self._extract_role_mentions(
+            result,
+            text,
+            source_url,
+            source_type,
+        )
+
+    def _extract_role_mentions(
+        self,
+        result: ApplicantEnrichment,
+        text: str,
+        source_url: str,
+        source_type: str,
+    ) -> None:
+        """
+        Owner/person discovery (Phase 2). Restricted to fetched public
+        pages (official website / public business directory) -- never
+        government_record or bare search-result snippets. A government
+        packet that explicitly labels ownership already has a dedicated,
+        higher-confidence extractor (application_extractor.extract_owner/
+        extract_parties()); mining free text on a government-hosted page
+        with this heuristic would only risk duplicating or contradicting
+        that authoritative source, not adding evidence.
+        """
+
+        if source_type not in (
+            "public_web",
+            "public_business_directory",
+        ):
+            return
+
+        if is_government_url(source_url) or (
+            government_domain_root(source_url)
+            in getattr(self, "_government_roots", ())
+        ):
+            # A general public-web search can surface a DIFFERENT .gov
+            # domain than the packet's own municipality (e.g. a state
+            # open-records/meeting-minutes site) -- excluded here
+            # regardless of _government_roots, which only tracks the
+            # packet's own municipal domain. Government-labeled ownership
+            # (e.g. a "Property Owner:" routing-table entry) already has
+            # a dedicated, authoritative extractor: application_extractor.
+            # extract_owner()/extract_parties(). This heuristic must not
+            # duplicate or second-guess that source, and a public agenda/
+            # minutes page frequently bundles multiple unrelated case
+            # numbers together, so a "Property Owner" line found there may
+            # not even belong to the application being enriched.
+            return
+
+        mentions = find_role_person_mentions(text)
+
+        if not mentions:
+            return
+
+        applicant_name = result.applicant_name or ""
+
+        applicant_tokens = {
+            token.lower()
+            for token in re.findall(r"[a-zA-Z]+", applicant_name)
+            if len(token) > 1
+        }
+
+        relevance = relevance_score(
+            applicant_name,
+            text,
+            address=self._project_address_lower,
+            neighborhood=self._relevance_neighborhood,
+            company_name=self._relevance_company_name,
+            source_type=source_type,
+        )
+
+        company_name = self._relevance_company_name
+
+        for name, role in mentions:
+            name_tokens = {
+                token.lower()
+                for token in re.findall(r"[a-zA-Z]+", name)
+            }
+
+            is_same_person = bool(applicant_tokens) and (
+                applicant_tokens <= name_tokens
+                or name_tokens <= applicant_tokens
+            )
+
+            if is_same_person:
+                # Confirms the already-known applicant's own professional
+                # role -- does not assert a new identity, so it is not
+                # gated on relevance_score() the way a distinct person is.
+                result.sources.append(
+                    Evidence(
+                        field="contact_role_candidate",
+                        value=role,
+                        source_url=source_url,
+                        source_type=source_type,
+                        confidence=source_confidence(
+                            source_url,
+                            source_type,
+                        ),
+                        evidence_text=surrounding_text(
+                            text,
+                            name,
+                        ),
+                    ).to_dict()
+                )
+                continue
+
+            # A distinct person is only accepted when the page/text
+            # itself already evidently concerns this applicant/company --
+            # never merely because a role keyword and some name co-occur
+            # on an unrelated page. See CLAUDE.md section 6: never
+            # associate a person merely because a search result "looks
+            # plausible".
+            if relevance < RELEVANCE_ACCEPT_THRESHOLD:
+                continue
+
+            if (
+                company_name
+                and name.strip().lower() == company_name.strip().lower()
+            ):
+                # The "name" span is the company itself, not a person.
+                continue
+
+            confidence = round(
+                max(
+                    0.30,
+                    source_confidence(source_url, source_type) - 0.10,
+                ),
+                2,
+            )
+
+            result.discovered_parties.append(
+                {
+                    "party_name": name,
+                    "party_role": role,
+                    "party_company": company_name,
+                    "party_contact_email": None,
+                    "party_contact_phone": None,
+                    "party_source": source_type,
+                    "party_confidence": _confidence_label(confidence),
+                }
+            )
+
+            result.sources.append(
+                Evidence(
+                    field="owner_person_candidate",
+                    value=f"{name} ({role})",
+                    source_url=source_url,
+                    source_type=source_type,
+                    confidence=confidence,
+                    evidence_text=surrounding_text(
+                        text,
+                        name,
+                    ),
+                ).to_dict()
+            )
+
     def _extract_links(
         self,
         result: ApplicantEnrichment,
@@ -1147,6 +1524,37 @@ class ApplicantEnricher:
             and result.email_confidence >= 0.85
         ):
             result.enrichment_status = "contact_found"
+
+        role_candidates = [
+            item
+            for item in result.sources
+            if item.get("field") == "contact_role_candidate"
+        ]
+
+        role_candidates.sort(
+            key=lambda item: item.get("confidence", 0),
+            reverse=True,
+        )
+
+        if role_candidates:
+            result.contact_role = role_candidates[0]["value"]
+
+        deduped_parties = []
+        seen_parties = set()
+
+        for party in result.discovered_parties:
+            key = (
+                str(party.get("party_name") or "").lower(),
+                party.get("party_role"),
+            )
+
+            if key in seen_parties:
+                continue
+
+            seen_parties.add(key)
+            deduped_parties.append(party)
+
+        result.discovered_parties = deduped_parties
 
         # Do not expose all raw source objects twice.
         result.sources = dedupe_sources(

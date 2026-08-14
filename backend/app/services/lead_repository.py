@@ -107,6 +107,16 @@ _COLUMNS = (
     "priority_score",
     "is_actionable",
     "opportunity_reason",
+    "approval_status",
+    "approval_action",
+    "approval_action_type",
+    "approval_confidence",
+    "approval_basis",
+    "approval_relevant_date",
+    "approval_source",
+    "approval_source_type",
+    "approval_evidence",
+    "approval_reason",
     "contact_name",
     "contact_role",
     "applicant_email",
@@ -128,6 +138,21 @@ _COLUMNS = (
     "enrichment_method",
     "lead_status",
     "is_contactable",
+    "contactability_level",
+    "commercial_readiness",
+    "recommended_commercial_action",
+    "commercial_action_reason",
+    "outreach_status",
+    "outreach_qualification_status",
+    "outreach_channel",
+    "outreach_contact_type",
+    "outreach_contact_reason",
+    "outreach_message_subject",
+    "outreach_message_body",
+    "follow_up_required",
+    "follow_up_reason",
+    "last_outreach_at",
+    "outreach_events",
     "source",
     "source_url",
     "municipality",
@@ -228,6 +253,9 @@ def lead_to_row(lead: dict[str, Any]) -> dict[str, Any]:
     row["parties"] = _jsonb_array_column(
         lead.get("parties")
     )
+    row["outreach_events"] = _jsonb_array_column(
+        lead.get("outreach_events")
+    )
 
     row["record"] = {key: _json_safe(value) for key, value in lead.items()}
     row["updated_at"] = datetime.now(timezone.utc).isoformat()
@@ -282,6 +310,77 @@ def upsert_leads(
     return result
 
 
+def fetch_lead(
+    application_number: str,
+    client: Optional[Any] = None,
+    table: Optional[str] = None,
+) -> Optional[dict[str, Any]]:
+    """
+    Retrieve one canonical lead/opportunity record from Supabase by its
+    application_number (Phase 4 API retrieval boundary).
+
+    Returns the full canonical lead dict -- the same shape produced by
+    pipeline_orchestrator and verbatim-preserved in the "record" JSONB
+    column by lead_to_row() above -- or None when Supabase is not
+    configured or no row matches. Never fabricates a partial record: a
+    row with no "record" payload is treated as not found.
+
+    Genuine Supabase/network errors propagate, exactly like upsert_leads(),
+    so the API layer decides how to degrade (e.g. fall back to the JSON
+    artifact) rather than this module silently hiding a real failure.
+    """
+    if not is_configured():
+        return None
+
+    table = table or get_table_name()
+    client = client or get_client()
+
+    response = (
+        client.table(table)
+        .select("record")
+        .eq("application_number", application_number)
+        .limit(1)
+        .execute()
+    )
+
+    rows = response.data or []
+
+    if not rows:
+        return None
+
+    return rows[0].get("record")
+
+
+def fetch_leads(
+    client: Optional[Any] = None,
+    table: Optional[str] = None,
+    limit: Optional[int] = None,
+) -> list[dict[str, Any]]:
+    """
+    Retrieve every canonical lead/opportunity record from Supabase
+    (Phase 4 API retrieval boundary).
+
+    Returns [] when Supabase is not configured or the table has no rows --
+    never raises for a missing configuration, mirroring is_configured()'s
+    role elsewhere in this module. Genuine Supabase/network errors
+    propagate, exactly like upsert_leads()/fetch_lead() above.
+    """
+    if not is_configured():
+        return []
+
+    table = table or get_table_name()
+    client = client or get_client()
+
+    query = client.table(table).select("record")
+
+    if limit:
+        query = query.limit(limit)
+
+    response = query.execute()
+
+    return [row["record"] for row in (response.data or []) if row.get("record")]
+
+
 __all__ = [
     "DEFAULT_TABLE",
     "is_configured",
@@ -289,4 +388,6 @@ __all__ = [
     "get_client",
     "lead_to_row",
     "upsert_leads",
+    "fetch_lead",
+    "fetch_leads",
 ]

@@ -2,10 +2,10 @@
 PermitSignal Pipeline Orchestrator Tests
 
 These tests target the CURRENT backend.app.services.pipeline_orchestrator
-API. Sections [1/10]-[6/10] are deterministic (mocked service boundaries, no
-PDF, no network). Sections [7/10]-[9/10] run the real production pipeline
+API. Sections [1/11]-[7/11] are deterministic (mocked service boundaries, no
+PDF, no network). Sections [8/11]-[10/11] run the real production pipeline
 against the real Provo packet, per DEVELOPMENT_RULES section 15
-(Real-PDF Validation). Section [10/10] exercises Supabase lead persistence
+(Real-PDF Validation). Section [11/11] exercises Supabase lead persistence
 via _persist_leads() directly. The disabled path runs for real (it never
 even imports lead_repository). The "not configured" path forces
 SUPABASE_URL/SUPABASE_KEY out of the environment for the duration of that
@@ -25,7 +25,7 @@ from unittest.mock import patch
 
 # Force lead_repository's module-level load_dotenv() to run exactly once,
 # right here, rather than lazily inside pipeline_orchestrator's first real
-# _import_service() call. Section [10/10] below deliberately pops
+# _import_service() call. Section [11/11] below deliberately pops
 # SUPABASE_URL/SUPABASE_KEY from os.environ to test the "not configured"
 # path -- if that were also the module's first import, load_dotenv() would
 # silently repopulate those variables from .env after the pop and before
@@ -33,7 +33,14 @@ from unittest.mock import patch
 # call against production Supabase.
 import backend.app.services.lead_repository  # noqa: F401
 
+from backend.app.services import commercial_lead_intelligence, outreach_intelligence
 from backend.app.services import pipeline_orchestrator as po
+from backend.app.services.commercial_lead_intelligence import (
+    READINESS_NEEDS_CONTACT_ENRICHMENT,
+    READINESS_NEEDS_MORE_PROJECT_EVIDENCE,
+    READINESS_NOT_READY,
+    READINESS_READY_FOR_OUTREACH,
+)
 from backend.app.services.pipeline_orchestrator import (
     DEFAULT_PDF,
     PRIORITY_ORDER,
@@ -43,6 +50,8 @@ from backend.app.services.pipeline_orchestrator import (
     _normalize_friction_record,
     _persist_leads,
     _sort_opportunities,
+    _validate_batch,
+    _validate_opportunity,
     run_pipeline,
 )
 
@@ -67,7 +76,7 @@ def main():
     results = []
 
     # ------------------------------------------------------------------------
-    print("\n[1/10] Application deduplication")
+    print("\n[1/11] Application deduplication")
 
     records = [
         {"application_number": "PLRZ20260264", "applicant_name": "Jared Morgan"},
@@ -88,7 +97,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[2/10] Friction record normalization")
+    print("\n[2/11] Friction record normalization")
 
     application = {
         "application_number": "PLRZ20260264",
@@ -125,7 +134,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[3/10] Date adapter integration and historical-date safety")
+    print("\n[3/11] Date adapter integration and historical-date safety")
 
     class FakeDateModule:
         @staticmethod
@@ -205,7 +214,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[4/10] Priority sorting")
+    print("\n[4/11] Priority sorting")
 
     queue = [
         {"application_number": "LOW", "priority": "LOW", "priority_score": 40},
@@ -226,7 +235,7 @@ def main():
 
     # ------------------------------------------------------------------------
     print(
-        "\n[5/10] Applicant identity/contact enrichment orchestration "
+        "\n[5/11] Applicant identity/contact enrichment orchestration "
         "(staff separation + government-record precedence)"
     )
 
@@ -325,7 +334,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[6/10] Full pipeline with mocked service boundaries")
+    print("\n[6/11] Full pipeline with mocked service boundaries")
 
     SAMPLE_TEXT = (
         "Planning Commission public hearing August 12, 2026 at 6:00 PM."
@@ -429,6 +438,27 @@ def main():
                 "enrichment_status": "enriched",
             }
 
+    class FakeApprovalModuleFull:
+        @staticmethod
+        def apply_approval_intelligence(opportunities):
+            # Mirrors the real module's shape closely enough to prove the
+            # pipeline wires this Phase 3 stage in without disturbing any
+            # field an earlier stage already set.
+            results = []
+            for opportunity in opportunities:
+                if opportunity.get("friction_score", 0) >= 70:
+                    approval = {
+                        "approval_status": "denied",
+                        "approval_action": "no immediate action identified",
+                    }
+                else:
+                    approval = {
+                        "approval_status": "scheduled",
+                        "approval_action": "attend scheduled hearing",
+                    }
+                results.append({**opportunity, **approval})
+            return results
+
     def _fake_import_full(name):
         mapping = {
             po.APPLICATION_EXTRACTOR_MODULE: FakeApplicationModule,
@@ -437,6 +467,14 @@ def main():
             po.OPPORTUNITY_MODULE: FakeOpportunityModule,
             po.APPLICANT_IDENTITY_MODULE: FakeIdentityModuleFull,
             po.APPLICANT_ENRICHMENT_MODULE: FakeEnrichmentModuleFull,
+            po.APPROVAL_INTELLIGENCE_MODULE: FakeApprovalModuleFull,
+            # Phase 6 commercial lead intelligence and Phase 8 outreach
+            # intelligence are both deterministic and have no PDF/network
+            # dependency, so the full mocked pipeline runs the real modules
+            # rather than fakes -- this proves the actual wiring, not a
+            # stand-in for it.
+            po.COMMERCIAL_INTELLIGENCE_MODULE: commercial_lead_intelligence,
+            po.OUTREACH_INTELLIGENCE_MODULE: outreach_intelligence,
         }
         return mapping[name]
 
@@ -451,6 +489,13 @@ def main():
             "fake.pdf",
             reference_date=REFERENCE_DATE,
             live_enrichment=False,
+            # A nonexistent path keeps this mocked section fully isolated
+            # from whatever the real production JSON artifact
+            # (data/output/permitsignal_opportunities.json) currently
+            # contains on disk -- Phase 8's outreach-lifecycle lookup
+            # (pipeline_orchestrator._load_previous_leads_by_number) reads
+            # that file directly, not through the mocked _import_service.
+            output_path="data/output/__test_pipeline_orchestrator_mocked__.json",
             verbose=False,
         )
 
@@ -493,6 +538,13 @@ def main():
     )
     results.append(
         check(
+            mocked_jared.get("approval_status") == "denied",
+            "Pipeline applies approval-action intelligence (Phase 3) "
+            "after friction/date/opportunity/enrichment stages",
+        )
+    )
+    results.append(
+        check(
             mocked_jared.get("company_name") == "Fake Identity Co",
             "Pipeline applies applicant identity enrichment",
         )
@@ -502,6 +554,44 @@ def main():
             mocked_jared.get("enrichment_status") == "disabled",
             "Pipeline reports contact enrichment as disabled when "
             "live_enrichment=False",
+        )
+    )
+    results.append(
+        check(
+            mocked_jared.get("commercial_readiness")
+            in {
+                READINESS_READY_FOR_OUTREACH,
+                READINESS_NEEDS_CONTACT_ENRICHMENT,
+                READINESS_NEEDS_MORE_PROJECT_EVIDENCE,
+                READINESS_NOT_READY,
+            },
+            "Pipeline applies commercial lead intelligence (Phase 6) "
+            "after lead qualification, producing one of the four defined "
+            "readiness states",
+        )
+    )
+    results.append(
+        check(
+            bool(mocked_jared.get("recommended_commercial_action")),
+            "Pipeline attaches a non-empty recommended commercial action",
+        )
+    )
+    results.append(
+        check(
+            mocked_jared.get("outreach_status")
+            in {
+                outreach_intelligence.OUTREACH_STATUS_NEW,
+                outreach_intelligence.OUTREACH_STATUS_QUALIFIED,
+                outreach_intelligence.OUTREACH_STATUS_READY,
+            },
+            "Pipeline applies Phase 8 outreach intelligence (lifecycle "
+            "status) after commercial lead intelligence",
+        )
+    )
+    results.append(
+        check(
+            bool(mocked_jared.get("outreach_qualification_status")),
+            "Pipeline attaches a non-empty outreach qualification status",
         )
     )
     results.append(
@@ -526,7 +616,92 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[7/10] Real Provo packet: counts, priority, and project dates")
+    print("\n[7/11] Missing application_type does not fail validation or the batch")
+
+    # Regression test for the real Provo failure: 5 of 19 live packets each
+    # had exactly one opportunity whose government-record text used an
+    # application_type phrasing extract_application_type() didn't recognize
+    # (e.g. "General Plan Map Amendment" vs. the narrower "General Plan
+    # Amendment" pattern). _validate_batch() previously raised PipelineError
+    # for the entire document over that single field, discarding every
+    # other valid opportunity in the same packet.
+    results.append(
+        check(
+            _validate_opportunity(
+                {
+                    "application_number": "PLGPA20250235",
+                    "applicant_name": "Brixton Capital",
+                    "application_type": None,
+                }
+            )
+            == [],
+            "A record with only application_type missing has no validation errors",
+        )
+    )
+    results.append(
+        check(
+            _validate_opportunity(
+                {
+                    "application_number": None,
+                    "applicant_name": "Brixton Capital",
+                    "application_type": "Zone Map Amendment",
+                }
+            )
+            == ["missing application_number"],
+            "application_number is still required (validation not weakened for unrelated fields)",
+        )
+    )
+    results.append(
+        check(
+            _validate_opportunity(
+                {
+                    "application_number": "PLGPA20250235",
+                    "applicant_name": None,
+                    "application_type": "Zone Map Amendment",
+                }
+            )
+            == ["missing applicant_name"],
+            "applicant_name is still required (validation not weakened for unrelated fields)",
+        )
+    )
+
+    mixed_batch = [
+        {
+            "application_number": "PLRZ20250236",
+            "applicant_name": "Brixton Capital",
+            "application_type": "Zone Map Amendment",
+        },
+        {
+            # Mirrors the real _03112026-362.pdf failure: a legitimate
+            # opportunity whose type phrase went unrecognized.
+            "application_number": "PLGPA20250235",
+            "applicant_name": "Brixton Capital",
+            "application_type": None,
+        },
+    ]
+
+    batch_error = None
+    try:
+        _validate_batch(mixed_batch)
+    except Exception as exc:  # noqa: BLE001 - asserting no raise at all
+        batch_error = exc
+
+    results.append(
+        check(
+            batch_error is None,
+            "A batch with one missing-application_type opportunity no longer "
+            "raises PipelineError for the whole document",
+        )
+    )
+    results.append(
+        check(
+            mixed_batch[1]["application_type"] is None,
+            "The unresolved application_type is preserved as None, never fabricated",
+        )
+    )
+
+    # ------------------------------------------------------------------------
+    print("\n[8/11] Real Provo packet: counts, priority, and project dates")
 
     real_result = run_pipeline(
         DEFAULT_PDF,
@@ -594,7 +769,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[8/10] Real Provo packet: contact integrity and output structure")
+    print("\n[9/11] Real Provo packet: contact integrity and output structure")
 
     results.append(
         check(
@@ -666,7 +841,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[9/10] Real Provo packet: lead intelligence and queue stability")
+    print("\n[10/11] Real Provo packet: lead intelligence and queue stability")
 
     results.append(
         check(
@@ -705,6 +880,100 @@ def main():
         )
     )
 
+    # Phase 6: commercial lead intelligence must be present on every real
+    # opportunity, and must never claim readiness for outreach without
+    # underlying contact evidence.
+    results.append(
+        check(
+            all(
+                "commercial_readiness" in o
+                and "contactability_level" in o
+                and "recommended_commercial_action" in o
+                and "commercial_action_reason" in o
+                for o in real_opportunities
+            ),
+            "Every real opportunity carries the four Phase 6 commercial "
+            "fields",
+        )
+    )
+    results.append(
+        check(
+            all(
+                o.get("commercial_readiness") != READINESS_READY_FOR_OUTREACH
+                for o in real_opportunities
+                if not o.get("is_contactable")
+            ),
+            "No real opportunity is marked READY_FOR_OUTREACH without "
+            "contactable evidence",
+        )
+    )
+    results.append(
+        check(
+            jared_lead.get("commercial_readiness")
+            == READINESS_NEEDS_CONTACT_ENRICHMENT,
+            "Jared Morgan's NO_CONTACT lead maps to "
+            "NEEDS_CONTACT_ENRICHMENT, not a fabricated READY_FOR_OUTREACH",
+        )
+    )
+
+    # Phase 8: every real opportunity must carry outreach lifecycle fields,
+    # and none may be fabricated into an advanced lifecycle stage.
+    results.append(
+        check(
+            all(
+                "outreach_status" in o and "outreach_qualification_status" in o
+                for o in real_opportunities
+            ),
+            "Every real opportunity carries the Phase 8 outreach lifecycle "
+            "fields",
+        )
+    )
+    _VALID_OUTREACH_STATUSES = {
+        outreach_intelligence.OUTREACH_STATUS_NEW,
+        outreach_intelligence.OUTREACH_STATUS_QUALIFIED,
+        outreach_intelligence.OUTREACH_STATUS_READY,
+        outreach_intelligence.OUTREACH_STATUS_CONTACTED,
+        outreach_intelligence.OUTREACH_STATUS_REPLIED,
+        outreach_intelligence.OUTREACH_STATUS_ENGAGED,
+        outreach_intelligence.OUTREACH_STATUS_OPPORTUNITY,
+        outreach_intelligence.OUTREACH_STATUS_WON,
+        outreach_intelligence.OUTREACH_STATUS_LOST,
+    }
+    _PRE_OUTREACH = {
+        outreach_intelligence.OUTREACH_STATUS_NEW,
+        outreach_intelligence.OUTREACH_STATUS_QUALIFIED,
+        outreach_intelligence.OUTREACH_STATUS_READY,
+    }
+
+    results.append(
+        check(
+            all(o.get("outreach_status") in _VALID_OUTREACH_STATUSES for o in real_opportunities),
+            "Every real opportunity's outreach_status is a valid lifecycle value",
+        )
+    )
+    results.append(
+        check(
+            all(
+                o.get("outreach_status") in _PRE_OUTREACH or o.get("outreach_events")
+                for o in real_opportunities
+            ),
+            "No real opportunity is fabricated into an advanced lifecycle "
+            "stage without a recorded controlled event -- this repo's "
+            "shared production JSON/Supabase state may legitimately carry "
+            "forward real outreach history from prior manual verification "
+            "runs against the live Provo packet, which is expected",
+        )
+    )
+    results.append(
+        check(
+            jared_lead.get("outreach_qualification_status")
+            == outreach_intelligence.QUALIFICATION_QUALIFIED_NOT_CONTACTABLE,
+            "Jared Morgan's NEEDS_CONTACT_ENRICHMENT readiness maps to "
+            "QUALIFIED_NOT_CONTACTABLE, not a fabricated ready-for-outreach "
+            "state",
+        )
+    )
+
     # The lead-intelligence stage must not disturb the existing priority
     # ordering: PLRZ20260264 and PLCP20260261 stay on top at HIGH/180.
     top_two = [
@@ -724,7 +993,7 @@ def main():
     )
 
     # ------------------------------------------------------------------------
-    print("\n[10/10] Supabase lead persistence (compatibility-layer safety)")
+    print("\n[11/11] Supabase lead persistence (compatibility-layer safety)")
 
     sample_opportunities = [
         {"application_number": "PLRZ20260264", "applicant_name": "Jared Morgan"},

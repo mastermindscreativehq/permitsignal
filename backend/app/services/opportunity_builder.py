@@ -223,6 +223,61 @@ class Opportunity:
     lead_status: str = "NEW"
     is_contactable: bool = False
 
+    # Approval-Action Intelligence (Phase 3, populated by
+    # backend.app.services.approval_action_intelligence during pipeline
+    # stage 6, after applicant/owner enrichment). Declared here with
+    # explicit None defaults for the same reason as the contact-intelligence
+    # fields above -- every opportunity carries the full schema even when no
+    # evidence exists yet. approval_basis distinguishes confirmed_requirement
+    # / evidence_backed_recommendation / inferred_next_step / unknown; never
+    # presents an inferred action as a confirmed government requirement.
+    approval_status: Optional[str] = None
+    approval_action: Optional[str] = None
+    approval_action_type: Optional[str] = None
+    approval_confidence: Optional[str] = None
+    approval_basis: Optional[str] = None
+    approval_relevant_date: Optional[str] = None
+    approval_source: Optional[str] = None
+    approval_source_type: Optional[str] = None
+    approval_evidence: Optional[str] = None
+    approval_reason: Optional[str] = None
+
+    # Commercial Lead Intelligence (Phase 6, populated by
+    # backend.app.services.commercial_lead_intelligence during pipeline
+    # stage 6, after lead qualification). Declared here with explicit None
+    # defaults for the same reason as the approval-action fields above --
+    # every opportunity carries the full schema even when no evidence
+    # exists yet. This layer never fabricates a decision-maker, contact, or
+    # business reason -- it only re-labels lead_status/is_contactable and
+    # approval_action, which are themselves already evidence-backed.
+    contactability_level: Optional[str] = None
+    commercial_readiness: Optional[str] = None
+    recommended_commercial_action: Optional[str] = None
+    commercial_action_reason: Optional[str] = None
+
+    # Outreach / Commercial Lifecycle (Phase 8, populated by
+    # backend.app.services.outreach_intelligence after commercial lead
+    # intelligence). outreach_status also serves as the commercial/revenue
+    # status (see that module's docstring): READY_FOR_OUTREACH is the point
+    # a qualified lead becomes sellable; OPPORTUNITY/WON/LOST track the
+    # resulting deal outcome -- no separate monetization field is
+    # introduced. outreach_contact_type/outreach_contact_reason only
+    # record WHICH already-computed party (owner/applicant/
+    # applicant_of_record/company/none) is the appropriate outreach target
+    # and why -- they never duplicate the underlying contact fields
+    # themselves.
+    outreach_status: str = "NEW"
+    outreach_qualification_status: Optional[str] = None
+    outreach_channel: Optional[str] = None
+    outreach_contact_type: Optional[str] = None
+    outreach_contact_reason: Optional[str] = None
+    outreach_message_subject: Optional[str] = None
+    outreach_message_body: Optional[str] = None
+    follow_up_required: bool = False
+    follow_up_reason: Optional[str] = None
+    last_outreach_at: Optional[str] = None
+    outreach_events: list[dict[str, Any]] = field(default_factory=list)
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 
@@ -508,6 +563,13 @@ def extract_friction_data(
             "events",
             "evidence_events",
             "historical_evidence",
+            default=_first(
+                application,
+                "friction_events",
+                "events",
+                "historical_evidence",
+                default=[],
+            ),
         )
     )
 
@@ -1542,6 +1604,16 @@ def _contact_tier(opportunity: Mapping[str, Any]) -> str:
     return "strong"
 
 
+# Public aliases for backend.app.services.commercial_lead_intelligence
+# (Phase 6), which classifies contactability at a finer grain (person vs.
+# company vs. public-business contact) than the "none"/"weak"/"strong"
+# tiers here but must never re-derive that classification from the raw
+# contact fields a second time -- see DEVELOPMENT_RULES.md section 5 (Do
+# Not Duplicate Business Logic).
+contact_tier = _contact_tier
+GENERIC_CONTACT_PREFIXES = _GENERIC_CONTACT_PREFIXES
+
+
 def is_contactable_lead(opportunity: Mapping[str, Any]) -> bool:
     """
     True only when legitimate public contact evidence exists. Never
@@ -1630,4 +1702,6 @@ __all__ = [
     "is_contactable_lead",
     "classify_lead_status",
     "qualify_lead",
+    "contact_tier",
+    "GENERIC_CONTACT_PREFIXES",
 ]

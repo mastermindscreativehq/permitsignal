@@ -680,20 +680,39 @@ class _CaseReportCanvas(Canvas):
 # PUBLIC API
 # ============================================================================
 
+def _load_output(output_path: "Path | str" = DEFAULT_OUTPUT) -> Optional[dict]:
+    path = Path(output_path)
+    if not path.exists():
+        return None
+    with path.open("r", encoding="utf-8") as handle:
+        return json.load(handle)
+
+
 def load_lead_by_application_number(
     application_number: str,
     output_path: "Path | str" = DEFAULT_OUTPUT,
 ) -> Optional[dict]:
     """Reads the pipeline's always-produced JSON artifact and returns the matching lead_queue entry, or None."""
-    path = Path(output_path)
-    if not path.exists():
+    data = _load_output(output_path)
+    if data is None:
         return None
-    with path.open("r", encoding="utf-8") as handle:
-        data = json.load(handle)
     for lead in data.get("lead_queue", []):
         if lead.get("application_number") == application_number:
             return lead
     return None
+
+
+def load_lead_queue(output_path: "Path | str" = DEFAULT_OUTPUT) -> list[dict]:
+    """
+    Phase 4 API retrieval fallback: reads the pipeline's always-produced
+    JSON artifact and returns the full lead_queue list, or [] when the
+    artifact does not exist yet. Used by GET /leads when Supabase is not
+    configured or has no rows.
+    """
+    data = _load_output(output_path)
+    if data is None:
+        return []
+    return data.get("lead_queue", [])
 
 
 def generate_case_report_pdf(lead: dict) -> bytes:
@@ -725,4 +744,4 @@ def generate_case_report_pdf(lead: dict) -> bytes:
     return buffer.getvalue()
 
 
-__all__ = ["load_lead_by_application_number", "generate_case_report_pdf"]
+__all__ = ["load_lead_by_application_number", "load_lead_queue", "generate_case_report_pdf"]
