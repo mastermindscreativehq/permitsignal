@@ -8,6 +8,10 @@ import { HighPriorityOpportunityCard } from "@/components/leads/HighPriorityOppo
 import { AttentionQueue } from "@/components/leads/AttentionQueue";
 
 export const dynamic = "force-dynamic";
+// The PermitSignal API's /leads call has been observed taking ~11s in
+// production; Vercel's serverless default (10s) would otherwise cut this
+// off before the fetch in getLeads() resolves.
+export const maxDuration = 30;
 
 export default async function OverviewPage() {
   const leads = await getLeads();

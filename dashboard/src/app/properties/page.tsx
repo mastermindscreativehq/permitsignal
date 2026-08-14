@@ -6,6 +6,9 @@ import { LeadFilterBar } from "@/components/leads/LeadFilterBar";
 import { LeadQueueTable } from "@/components/leads/LeadQueueTable";
 
 export const dynamic = "force-dynamic";
+// See src/app/page.tsx -- the PermitSignal API's /leads call has been
+// observed taking ~11s in production, past Vercel's 10s serverless default.
+export const maxDuration = 30;
 
 type SearchParams = Promise<{
   priority?: string;

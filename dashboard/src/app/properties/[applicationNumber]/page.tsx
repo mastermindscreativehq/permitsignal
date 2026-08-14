@@ -15,6 +15,9 @@ import { OutreachCard } from "@/components/leads/detail/OutreachCard";
 import { EvidenceView } from "@/components/leads/detail/EvidenceView";
 
 export const dynamic = "force-dynamic";
+// See src/app/page.tsx -- the PermitSignal API has been observed taking
+// ~11s per call in production, past Vercel's 10s serverless default.
+export const maxDuration = 30;
 
 export default async function PropertyDetailPage({
   params,
