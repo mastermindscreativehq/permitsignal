@@ -201,6 +201,8 @@ export function computeDashboardStats(leads: Lead[]): DashboardStats {
     contactable: leads.filter(isContactable).length,
     needingDiscovery: leads.filter(needsContactDiscovery).length,
     upcomingEvents: leads.filter(hasUpcomingEvent).length,
+    totalEstimatedValue: leads.reduce((sum, lead) => sum + (lead.estimated_value_mid ?? 0), 0),
+    totalPublicSpend: leads.reduce((sum, lead) => sum + (lead.public_spend_mid ?? 0), 0),
     priorityDistribution,
   };
 }

@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { getLeads } from "@/lib/leads";
 import { computeDashboardStats } from "@/lib/lead-helpers";
+import { formatCurrency } from "@/lib/format";
 import { PageHeader } from "@/components/layout/PageHeader";
 import { StatCard } from "@/components/ui/StatCard";
 import { PriorityDistribution } from "@/components/leads/PriorityDistribution";
@@ -54,6 +55,16 @@ export default async function OverviewPage() {
         />
         <StatCard label="Contactable" value={stats.contactable} hint="Verified public contact found" accent="positive" />
         <StatCard label="Upcoming Events" value={stats.upcomingEvents} hint="Future hearings / meetings" />
+        <StatCard
+          label="Project Value Identified"
+          value={formatCurrency(stats.totalEstimatedValue)}
+          hint="Sum of estimated project value across all leads"
+        />
+        <StatCard
+          label="Public Spend Identified"
+          value={formatCurrency(stats.totalPublicSpend)}
+          hint="Sum of government/public spend, distinct from project value"
+        />
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[1fr_280px]">

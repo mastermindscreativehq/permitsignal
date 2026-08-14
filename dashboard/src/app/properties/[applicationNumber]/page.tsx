@@ -8,6 +8,7 @@ import { PartiesCard } from "@/components/leads/detail/PartiesCard";
 import { FrictionCard } from "@/components/leads/detail/FrictionCard";
 import { NextEventCard } from "@/components/leads/detail/NextEventCard";
 import { ApprovalActionCard } from "@/components/leads/detail/ApprovalActionCard";
+import { EconomicIntelligenceCard } from "@/components/leads/detail/EconomicIntelligenceCard";
 import { OpportunityCard } from "@/components/leads/detail/OpportunityCard";
 import { FollowUpCard } from "@/components/leads/detail/FollowUpCard";
 import { ContactIntelligenceCard } from "@/components/leads/detail/ContactIntelligenceCard";
@@ -70,6 +71,7 @@ export default async function PropertyDetailPage({
             <FrictionCard lead={lead} />
             <NextEventCard lead={lead} />
             <ApprovalActionCard lead={lead} />
+            <EconomicIntelligenceCard lead={lead} />
           </div>
           <div className="flex min-w-0 flex-col gap-5">
             <OpportunityCard lead={lead} />

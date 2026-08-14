@@ -149,6 +149,38 @@ export function outreachStatusVariant(status: string | null | undefined): Varian
   }
 }
 
+export function formatCurrency(value: number | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  if (value === 0) return "$0";
+  const abbreviate = (n: number) => {
+    if (n >= 1_000_000) return `$${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`;
+    if (n >= 1_000) return `$${(n / 1_000).toFixed(0)}K`;
+    return `$${n.toFixed(0)}`;
+  };
+  return abbreviate(value);
+}
+
+export function formatCurrencyRange(low: number | null | undefined, high: number | null | undefined): string {
+  if (low === null || low === undefined || high === null || high === undefined) return "—";
+  if (low === high) return formatCurrency(low);
+  return `${formatCurrency(low)} – ${formatCurrency(high)}`;
+}
+
+export function publicFundingVariant(status: string | null | undefined): Variant {
+  switch (status) {
+    case "confirmed_public_funding":
+    case "government_procurement":
+      return "status-positive";
+    case "likely_public_funding":
+    case "mixed_public_private":
+      return "status-caution";
+    case "private_project":
+      return "status-neutral";
+    default:
+      return "status-neutral";
+  }
+}
+
 export function approvalBasisVariant(basis: string | null | undefined): Variant {
   switch (basis) {
     case "confirmed_requirement":

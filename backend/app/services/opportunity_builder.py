@@ -278,6 +278,37 @@ class Opportunity:
     last_outreach_at: Optional[str] = None
     outreach_events: list[dict[str, Any]] = field(default_factory=list)
 
+    # Economic Intelligence (Phase 9, populated by
+    # backend.app.services.economic_intelligence after approval-action
+    # intelligence). Declared here with explicit None defaults for the same
+    # reason as the phase fields above. estimated_value_* is the project's
+    # own economic scale (an ESTIMATE unless source_type is
+    # disclosed_document_value); public_spend_* is a SEPARATE figure for
+    # whether government money is actually expected to be spent -- a
+    # private developer's project can have a large estimated_value and
+    # public_spend of exactly 0. Never fabricated: absent evidence leaves
+    # these fields None/"insufficient_evidence" rather than guessing.
+    project_scale_units: Optional[int] = None
+    project_scale_type: Optional[str] = None
+    project_scale_basis: Optional[str] = None
+
+    estimated_value_low: Optional[float] = None
+    estimated_value_high: Optional[float] = None
+    estimated_value_mid: Optional[float] = None
+    estimated_value_currency: str = "USD"
+    estimated_value_confidence: Optional[str] = None
+    estimated_value_source_type: Optional[str] = None
+    estimated_value_basis: Optional[str] = None
+
+    public_funding_status: Optional[str] = None
+    public_funding_confidence: Optional[str] = None
+    public_funding_basis: Optional[str] = None
+
+    public_spend_low: Optional[float] = None
+    public_spend_high: Optional[float] = None
+    public_spend_mid: Optional[float] = None
+    public_spend_confidence: Optional[str] = None
+
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
 

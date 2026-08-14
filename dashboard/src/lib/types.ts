@@ -203,6 +203,34 @@ export interface Lead {
     resulting_status: string | null;
   }[];
 
+  // Phase 9 -- Economic Intelligence. estimated_value_* is the project's
+  // own economic scale (an ESTIMATE unless source_type is
+  // disclosed_document_value); public_spend_* is a SEPARATE figure for
+  // whether government money is actually expected to be spent -- a
+  // private developer's project can carry a large estimated value and a
+  // public_spend of exactly 0. See backend/app/services/
+  // economic_intelligence.py.
+  project_scale_units: number | null;
+  project_scale_type: string | null;
+  project_scale_basis: string | null;
+
+  estimated_value_low: number | null;
+  estimated_value_high: number | null;
+  estimated_value_mid: number | null;
+  estimated_value_currency: string | null;
+  estimated_value_confidence: string | null;
+  estimated_value_source_type: string | null;
+  estimated_value_basis: string | null;
+
+  public_funding_status: string | null;
+  public_funding_confidence: string | null;
+  public_funding_basis: string | null;
+
+  public_spend_low: number | null;
+  public_spend_high: number | null;
+  public_spend_mid: number | null;
+  public_spend_confidence: string | null;
+
   source: string | null;
   source_url: string | null;
   municipality: string | null;
@@ -240,6 +268,10 @@ export interface DashboardStats {
   contactable: number;
   needingDiscovery: number;
   upcomingEvents: number;
+  // Phase 9 -- sums of estimated_value_mid / public_spend_mid across leads
+  // that carry evidence for each (never fabricated for leads with none).
+  totalEstimatedValue: number;
+  totalPublicSpend: number;
   priorityDistribution: { priority: Priority; count: number }[];
 }
 

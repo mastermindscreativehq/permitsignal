@@ -41,6 +41,7 @@ OPPORTUNITY_MODULE = "backend.app.services.opportunity_builder"
 APPLICANT_IDENTITY_MODULE = "backend.app.services.applicant_identity"
 APPLICANT_ENRICHMENT_MODULE = "backend.app.services.applicant_enrichment"
 APPROVAL_INTELLIGENCE_MODULE = "backend.app.services.approval_action_intelligence"
+ECONOMIC_INTELLIGENCE_MODULE = "backend.app.services.economic_intelligence"
 COMMERCIAL_INTELLIGENCE_MODULE = "backend.app.services.commercial_lead_intelligence"
 OUTREACH_INTELLIGENCE_MODULE = "backend.app.services.outreach_intelligence"
 LEAD_REPOSITORY_MODULE = "backend.app.services.lead_repository"
@@ -660,6 +661,61 @@ def _apply_approval_intelligence(
 
 
 # ============================================================================
+# ECONOMIC INTELLIGENCE (Phase 9)
+# ============================================================================
+
+def _apply_economic_intelligence(
+    opportunities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Attach project-value/public-spend fields (project_scale_*,
+    estimated_value_*, public_funding_*, public_spend_*) to each
+    already-approval-enriched opportunity. Purely additive and reads only
+    application_type/description/applicant_name/company_name -- every
+    existing field is preserved unchanged.
+    """
+    module = _import_service(ECONOMIC_INTELLIGENCE_MODULE)
+
+    batch_fn = _first_callable(
+        module,
+        "apply_economic_intelligence",
+    )
+
+    if batch_fn is not None:
+        try:
+            result = batch_fn(opportunities)
+
+            if isinstance(result, list):
+                return result
+        except TypeError:
+            pass
+
+    single_fn = _first_callable(
+        module,
+        "build_economic_intelligence",
+    )
+
+    if single_fn is None:
+        raise PipelineError(
+            "economic_intelligence does not expose "
+            "apply_economic_intelligence() or build_economic_intelligence()."
+        )
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+        economic = single_fn(item)
+
+        if isinstance(economic, dict):
+            item.update(economic)
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
 # COMMERCIAL LEAD INTELLIGENCE (Phase 6)
 # ============================================================================
 
@@ -1222,6 +1278,10 @@ def run_pipeline(
     )
 
     completed_opportunities = _apply_approval_intelligence(
+        completed_opportunities
+    )
+
+    completed_opportunities = _apply_economic_intelligence(
         completed_opportunities
     )
 

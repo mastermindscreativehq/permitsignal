@@ -33,7 +33,7 @@ from unittest.mock import patch
 # call against production Supabase.
 import backend.app.services.lead_repository  # noqa: F401
 
-from backend.app.services import commercial_lead_intelligence, outreach_intelligence
+from backend.app.services import commercial_lead_intelligence, economic_intelligence, outreach_intelligence
 from backend.app.services import pipeline_orchestrator as po
 from backend.app.services.commercial_lead_intelligence import (
     READINESS_NEEDS_CONTACT_ENRICHMENT,
@@ -468,11 +468,12 @@ def main():
             po.APPLICANT_IDENTITY_MODULE: FakeIdentityModuleFull,
             po.APPLICANT_ENRICHMENT_MODULE: FakeEnrichmentModuleFull,
             po.APPROVAL_INTELLIGENCE_MODULE: FakeApprovalModuleFull,
-            # Phase 6 commercial lead intelligence and Phase 8 outreach
-            # intelligence are both deterministic and have no PDF/network
-            # dependency, so the full mocked pipeline runs the real modules
-            # rather than fakes -- this proves the actual wiring, not a
-            # stand-in for it.
+            # Phase 6 commercial lead intelligence, Phase 8 outreach
+            # intelligence, and Phase 9 economic intelligence are all
+            # deterministic and have no PDF/network dependency, so the full
+            # mocked pipeline runs the real modules rather than fakes --
+            # this proves the actual wiring, not a stand-in for it.
+            po.ECONOMIC_INTELLIGENCE_MODULE: economic_intelligence,
             po.COMMERCIAL_INTELLIGENCE_MODULE: commercial_lead_intelligence,
             po.OUTREACH_INTELLIGENCE_MODULE: outreach_intelligence,
         }
