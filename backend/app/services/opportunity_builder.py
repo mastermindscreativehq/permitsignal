@@ -1599,6 +1599,35 @@ _GENERIC_CONTACT_PREFIXES = {
 }
 
 
+def _party_contact(opportunity: Mapping[str, Any]) -> tuple[Optional[str], Optional[str]]:
+    """
+    The first (email, phone) pair from a distinct project party (Engineer/
+    Architect/Contractor/Attorney/Developer/Representative/other
+    participant, see application_extractor.extract_parties()/
+    extract_staff_report_identity() and applicant_enrichment.
+    discovered_parties) that carries usable contact evidence. The
+    commercial lead behind a project is not always the owner or applicant
+    -- a contactable party in any of these roles is real contact evidence
+    too.
+    """
+    parties = opportunity.get("parties")
+
+    if not isinstance(parties, list):
+        return None, None
+
+    for party in parties:
+        if not isinstance(party, Mapping):
+            continue
+
+        email = _text(party.get("party_contact_email"))
+        phone = _text(party.get("party_contact_phone"))
+
+        if email or phone:
+            return email, phone
+
+    return None, None
+
+
 def _contact_tier(opportunity: Mapping[str, Any]) -> str:
     """
     Classify the strength of the public contact evidence already present
@@ -1613,13 +1642,28 @@ def _contact_tier(opportunity: Mapping[str, Any]) -> str:
       applicant phone is explicitly treated as contactable per
       CONTACTABLE LOGIC in the project instructions).
     - Nothing at all -> "none".
+
+    Checks the applicant/generic contact fields first, then the property
+    owner and applicant-of-record's own contact fields, then any other
+    distinct project party's contact fields -- a lead is not "no contact"
+    just because the specific field checked first is empty.
     """
-    email = _text(opportunity.get("applicant_email")) or _text(
-        opportunity.get("contact_email")
+    email = (
+        _text(opportunity.get("applicant_email"))
+        or _text(opportunity.get("contact_email"))
+        or _text(opportunity.get("owner_contact_email"))
+        or _text(opportunity.get("applicant_contact_email"))
     )
-    phone = _text(opportunity.get("applicant_phone")) or _text(
-        opportunity.get("contact_phone")
+    phone = (
+        _text(opportunity.get("applicant_phone"))
+        or _text(opportunity.get("contact_phone"))
+        or _text(opportunity.get("owner_contact_phone"))
+        or _text(opportunity.get("applicant_contact_phone"))
     )
+
+    if not email and not phone:
+        party_email, party_phone = _party_contact(opportunity)
+        email, phone = party_email, party_phone
 
     if not email and not phone:
         return "none"

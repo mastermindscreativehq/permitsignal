@@ -161,13 +161,19 @@ BUSINESS_DIRECTORY_DOMAINS = {
 }
 
 # ---------------------------------------------------------------------------
-# OWNER / PERSON ROLE DISCOVERY (Phase 2)
+# OWNER / PERSON ROLE DISCOVERY (Phase 2, extended by Phase 10 identity
+# intelligence to the full project-participant taxonomy)
 #
-# Fixed vocabulary of ownership/principal-tier professional roles.
-# Deliberately excludes generic job titles ("manager", "associate") that do
-# not indicate a legitimately associated owner/principal/executive/partner
-# -- see CLAUDE.md section 6 (Contact Integrity Rules) and
-# docs/PHASE_2_OWNER_ENRICHMENT.md.
+# Fixed vocabulary of ownership/principal-tier AND other project-participant
+# professional roles (developer, representative/agent, design/construction
+# professionals, attorney). Deliberately excludes generic job titles
+# ("manager", "associate") that do not indicate a legitimately associated
+# project participant -- see CLAUDE.md section 6 (Contact Integrity Rules)
+# and docs/PHASE_2_OWNER_ENRICHMENT.md. The commercial lead behind a project
+# is not always the owner -- it may equally be the developer, an
+# architect/engineer, a contractor, an attorney, or a representative/agent
+# acting on the applicant's behalf, so all of these are tracked with the
+# same evidence bar as the ownership-tier roles above them.
 # ---------------------------------------------------------------------------
 
 ROLE_LABELS: dict[str, str] = {
@@ -186,6 +192,18 @@ ROLE_LABELS: dict[str, str] = {
     "founder": "Founder",
     "registered agent": "Registered Agent",
     "responsible person": "Responsible Person",
+    "developer": "Developer",
+    "project manager": "Project Manager",
+    "authorized representative": "Representative",
+    "representative": "Representative",
+    "agent of record": "Representative",
+    "agent": "Agent",
+    "attorney of record": "Attorney",
+    "attorney": "Attorney",
+    "general contractor": "Contractor",
+    "contractor": "Contractor",
+    "architect": "Architect",
+    "engineer": "Engineer",
 }
 
 # Longest phrase first, so "managing partner" is matched before the bare
@@ -254,6 +272,17 @@ NAME_STOPWORDS = {
     "partners",
     "holdings",
     "services",
+    "architects",
+    "architecture",
+    "engineers",
+    "engineering",
+    "contractors",
+    "attorneys",
+    "law",
+    "legal",
+    "associates",
+    "llp",
+    "pllc",
     "contact",
     "about",
     "team",

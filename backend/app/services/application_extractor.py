@@ -796,6 +796,12 @@ PARTY_ROLE_LABELS = (
     ("Architect of Record", "Architect"),
     ("Surveyor of Record", "Surveyor"),
     ("Landscape Architect", "Landscape Architect"),
+    ("General Contractor", "Contractor"),
+    ("Contractor of Record", "Contractor"),
+    ("Attorney of Record", "Attorney"),
+    ("Developer of Record", "Developer"),
+    ("Representative of Record", "Representative"),
+    ("Agent of Record", "Representative"),
 )
 
 NAME_CONTACT_PATTERN = re.compile(
@@ -822,10 +828,14 @@ _KNOWN_LABEL_STARTS = re.compile(
     r"^[ \t]*(?:"
     r"Applicant(?:\s+of\s+Record|\s+Contact)?"
     r"|Agent(?:\s+of\s+Record)?"
+    r"|Representative(?:\s+of\s+Record)?"
     r"|Property\s+Owner|Owner(?:\s+of\s+Record|\s+Contact)?"
     r"|Engineer(?:\s+of\s+Record|\s+Contact)?"
     r"|Architect(?:\s+of\s+Record|\s+Contact)?"
     r"|Surveyor\s+of\s+Record|Landscape\s+Architect"
+    r"|(?:General\s+)?Contractor(?:\s+of\s+Record)?"
+    r"|Attorney(?:\s+of\s+Record)?"
+    r"|Developer(?:\s+of\s+Record)?"
     r"|Zoning|Property\s+Location|Tract\s+Size|Total\s+Area|Acreage"
     r"|Parcel(?:\s+(?:Number|ID))?"
     r"|Staff\s+Contact|Prepared\s+by"
@@ -994,6 +1004,16 @@ def extract_owner(text: str) -> dict:
             care_of_name = clean(care_of_match.group(1))
             continue
 
+        # A line-wrap artifact in the source PDF text can leave a trailing
+        # comma on an entity-name line (e.g. "REYNOLDS ASSET MANAGEMENT
+        # LLC," immediately before an unrelated field on the next line) --
+        # strip it so it never becomes part of the stored entity name. A
+        # trailing SEMICOLON is deliberately left alone: real packets use
+        # it as a multi-owner list separator (e.g. "PEARSON, JOSEPH BYRD
+        # (ET AL); \nADAMS, SUANN P (ET AL)"), and stripping it would fuse
+        # two distinct owners into one unreadable string.
+        line = line.rstrip(",")
+
         owner_entity = f"{owner_entity} {line}" if owner_entity else line
 
     contact = _split_name_contact(_labeled_value(text, "Owner Contact"))
@@ -1107,6 +1127,124 @@ def extract_parties(text: str) -> list[dict]:
         )
 
     return parties
+
+
+# ============================================================
+# STAFF-REPORT IDENTITY (Phase 10)
+#
+# extract_applications() above intentionally operates on the agenda
+# section only ("Historical staff-report evidence belongs in the friction
+# analyzer"). But real multi-application Provo Planning Commission packets
+# ALSO repeat a compact routing table -- "APPLICANT: / PROPERTY OWNER: /
+# PARCEL ID: / ACREAGE: / CURRENT LEGAL USE:" -- directly after each
+# application's own number reappears in its separate staff-report section,
+# further down in the SAME document. This is real, labeled government-
+# record evidence (the same shape extract_owner()/extract_applicant_of_
+# record()/extract_property_details()/extract_parties() already parse),
+# just located outside the agenda section this module otherwise stays
+# within. extract_staff_report_identity() scans the FULL document once per
+# application, anchored on that application's own number (never on the
+# applicant's name, which is not guaranteed unique), and reuses those same
+# extractors unchanged against the bounded window found there -- no new
+# parsing logic, no fabrication, and no data attributed to the wrong
+# application/routing table.
+# ============================================================
+
+STAFF_REPORT_WINDOW_CHARS = 3000
+
+
+def _application_number_positions(text: str, application_number: str) -> list[int]:
+    if not text or not application_number:
+        return []
+
+    return [
+        match.start()
+        for match in re.finditer(re.escape(application_number), text, re.IGNORECASE)
+    ]
+
+
+def _next_other_application_number_position(
+    text: str,
+    application_number: str,
+    after: int,
+) -> Optional[int]:
+    """
+    Position of the next DIFFERENT application number appearing after
+    `after`, if any. Used to cap a staff-report window so that an
+    application with no routing table of its own never absorbs the next
+    application's routing table just because nothing distinguishes the
+    text in between.
+    """
+
+    for match in APPLICATION_NUMBER_PATTERN.finditer(text, after):
+        if match.group(0).upper() != application_number.upper():
+            return match.start()
+
+    return None
+
+
+def extract_staff_report_identity(text: str, application_number: Optional[str]) -> dict:
+    """
+    Property Owner / Applicant-of-Record / property routing-table evidence
+    from this specific application's own staff-report section elsewhere in
+    the full government packet. Returns the same shape as extract_owner()
+    + extract_applicant_of_record() + {"parties": extract_parties(...)}
+    combined. Deliberately excludes extract_property_details() (zoning/
+    acreage/parcel) -- out of scope for identity/contact intelligence.
+
+    Never fabricates: when this application has no staff-report routing
+    table (most municipalities' packets, and Provo's own ordinance text
+    amendments/general plan amendments, which have no staff report at
+    all), every field stays at its evidence-backed None/[] default exactly
+    as those functions already return for empty input.
+    """
+
+    empty = {
+        **extract_owner(""),
+        **extract_applicant_of_record(""),
+        "parties": [],
+    }
+
+    if not application_number or not text:
+        return empty
+
+    for position in _application_number_positions(text, application_number):
+        window_end = position + STAFF_REPORT_WINDOW_CHARS
+
+        next_other = _next_other_application_number_position(
+            text,
+            application_number,
+            position + len(application_number),
+        )
+
+        if next_other is not None:
+            window_end = min(window_end, next_other)
+
+        window = text[position:window_end]
+
+        if "APPLICANT" not in window.upper() and "PROPERTY OWNER" not in window.upper():
+            continue
+
+        owner = extract_owner(window)
+        applicant_of_record = extract_applicant_of_record(window)
+        parties = extract_parties(window)
+
+        found_anything = (
+            owner["owner_name"]
+            or owner["owner_entity"]
+            or applicant_of_record["applicant_entity"]
+            or applicant_of_record["applicant_contact_name"]
+            or parties
+        )
+
+        if found_anything:
+            return {
+                **owner,
+                **applicant_of_record,
+                "parties": parties,
+            }
+
+    return empty
 
 
 # ============================================================

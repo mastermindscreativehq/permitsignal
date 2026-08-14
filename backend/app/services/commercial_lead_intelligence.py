@@ -35,6 +35,21 @@ scoring. It only re-labels fields the pipeline has already computed:
                                               Phase 3)
     - owner_name / owner_entity             (application_extractor /
                                               applicant_identity, Phase 2)
+    - parties (Engineer/Architect/Contractor/Attorney/Developer/
+      Representative/other project participants, each with its own
+      party_contact_email/phone/source/confidence)
+                                             (application_extractor.
+                                              extract_parties()/
+                                              extract_staff_report_identity(),
+                                              Phase 1/10, and applicant_
+                                              enrichment.discovered_parties,
+                                              Phase 2)
+
+    The commercial lead behind a project is not always the owner or
+    applicant -- it may be a developer, architect, engineer, contractor,
+    attorney, or representative named as a distinct party. A contactable
+    party of any of these roles is treated as real contact evidence here,
+    exactly like an owner/applicant contact.
 
 Every commercial_* claim traces back to one of those existing,
 evidence-checked fields -- never a new identity match, never a new contact
@@ -135,6 +150,7 @@ ACTION_INVESTIGATE_DECISION_MAKER = "investigate missing decision-maker"
 ACTION_ENRICH_CONTACT = "enrich missing contact information"
 ACTION_FOLLOW_UP_APPROVAL = "follow up on an identified approval requirement"
 ACTION_CONTACT_OWNER = "contact identified owner/principal"
+ACTION_CONTACT_PARTY = "contact identified project party"
 ACTION_CONTACT_APPLICANT = "contact applicant/company"
 
 _NON_ACTIONS = {None, "", "unknown", "no immediate action identified"}
@@ -157,6 +173,35 @@ def _is_generic_email(email: str) -> bool:
     local = email.split("@", 1)[0].lower() if "@" in email else email.lower()
 
     return local in GENERIC_CONTACT_PREFIXES
+
+
+def _parties(opportunity: Mapping[str, Any]) -> list[Mapping[str, Any]]:
+    parties = opportunity.get("parties")
+
+    if not isinstance(parties, list):
+        return []
+
+    return [party for party in parties if isinstance(party, Mapping)]
+
+
+def find_contactable_party(
+    opportunity: Mapping[str, Any],
+) -> Optional[dict[str, Any]]:
+    """
+    The first party (Engineer/Architect/Contractor/Attorney/Developer/
+    Representative/other project participant) with usable public contact
+    evidence already attached -- a named professional's phone, or a
+    non-generic email. Never fabricates a contact: a party with only a
+    name/role and no party_contact_email/phone is not returned here.
+    """
+    for party in _parties(opportunity):
+        phone = _text(party.get("party_contact_phone"))
+        email = _text(party.get("party_contact_email"))
+
+        if phone or (email and not _is_generic_email(email)):
+            return dict(party)
+
+    return None
 
 
 # ============================================================================
@@ -182,6 +227,12 @@ def classify_contactability(opportunity: Mapping[str, Any]) -> str:
 
         if email and not _is_generic_email(email):
             return CONTACT_LEVEL_VERIFIED_PERSON
+
+    # A contactable non-owner/applicant project participant (architect,
+    # engineer, contractor, attorney, developer, representative, ...) is
+    # just as real a commercial contact as a named owner/applicant.
+    if find_contactable_party(opportunity) is not None:
+        return CONTACT_LEVEL_VERIFIED_PERSON
 
     # No named person contact. A generic mailbox is still a legitimate
     # public business contact -- distinguish an official company channel
@@ -300,6 +351,20 @@ def recommend_commercial_action(
             "with usable public contact evidence.",
         )
 
+    contactable_party = find_contactable_party(opportunity)
+
+    if contactable_party is not None:
+        party_name = _text(contactable_party.get("party_name")) or "An identified project party"
+        party_role = _text(contactable_party.get("party_role")) or "project participant"
+        party_company = _text(contactable_party.get("party_company"))
+        company_clause = f" ({party_company})" if party_company else ""
+
+        return (
+            ACTION_CONTACT_PARTY,
+            f"{party_name}{company_clause} is on record as the {party_role} "
+            "on this project with usable public contact evidence.",
+        )
+
     return (
         ACTION_CONTACT_APPLICANT,
         _text(opportunity.get("opportunity_reason"))
@@ -368,7 +433,9 @@ __all__ = [
     "ACTION_ENRICH_CONTACT",
     "ACTION_FOLLOW_UP_APPROVAL",
     "ACTION_CONTACT_OWNER",
+    "ACTION_CONTACT_PARTY",
     "ACTION_CONTACT_APPLICANT",
+    "find_contactable_party",
     "classify_contactability",
     "classify_commercial_readiness",
     "recommend_commercial_action",

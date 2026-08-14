@@ -208,6 +208,75 @@ def _merge_preserving_left(
 
 
 # ============================================================================
+# STAFF-REPORT IDENTITY (Phase 10)
+# ============================================================================
+
+def _apply_staff_report_identity(
+    applications: list[dict[str, Any]],
+    text: str,
+) -> list[dict[str, Any]]:
+    """
+    Additive owner/applicant-of-record/property-party evidence from each
+    application's own staff-report routing table elsewhere in the full
+    packet (see application_extractor.extract_staff_report_identity()).
+    Only fills a field that is currently None/empty on the agenda-section-
+    derived application dict -- never overwrites an existing value.
+    "parties" is merged by concatenation (deduplicated by name+role)
+    rather than precedence, since the agenda section and the staff report
+    can each legitimately name a different labeled party.
+    """
+    module = _import_service(APPLICATION_EXTRACTOR_MODULE)
+
+    fn = getattr(module, "extract_staff_report_identity", None)
+
+    if not callable(fn):
+        return applications
+
+    results: list[dict[str, Any]] = []
+
+    for application in applications:
+        number = application.get("application_number")
+
+        try:
+            staff_report = fn(text, number) if number else {}
+        except Exception:
+            staff_report = {}
+
+        merged = dict(application)
+
+        for key, value in (staff_report or {}).items():
+            if key == "parties":
+                combined = list(application.get("parties") or [])
+                seen = {
+                    (party.get("party_name"), party.get("party_role"))
+                    for party in combined
+                    if isinstance(party, dict)
+                }
+
+                for party in value or []:
+                    if not isinstance(party, dict):
+                        continue
+
+                    party_key = (party.get("party_name"), party.get("party_role"))
+
+                    if party_key in seen:
+                        continue
+
+                    seen.add(party_key)
+                    combined.append(party)
+
+                merged["parties"] = combined
+                continue
+
+            if merged.get(key) is None and value is not None:
+                merged[key] = value
+
+        results.append(merged)
+
+    return results
+
+
+# ============================================================================
 # FRICTION ADAPTER
 # ============================================================================
 
@@ -1163,6 +1232,11 @@ def run_pipeline(
 
     applications = _deduplicate_applications(
         applications
+    )
+
+    applications = _apply_staff_report_identity(
+        applications,
+        text,
     )
 
     if verbose:
