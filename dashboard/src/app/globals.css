@@ -1,0 +1,144 @@
+@import "tailwindcss";
+
+:root {
+  --background: #0b0c0e;
+  --background-elevated: #111214;
+  --surface: #14161a;
+  --surface-strong: #181a1f;
+  --border-subtle: #202329;
+  --border-strong: #2c3038;
+  --foreground: #eef0ee;
+  --foreground-muted: #9a9d9f;
+  --foreground-faint: #5c5f63;
+
+  --accent: #c9974a;
+  --accent-soft: rgba(201, 151, 74, 0.14);
+  --accent-strong: #dba85c;
+
+  --priority-high: #c9974a;
+  --priority-high-soft: rgba(201, 151, 74, 0.14);
+  --priority-medium: #7c8a9e;
+  --priority-medium-soft: rgba(124, 138, 158, 0.14);
+  --priority-low: #55585c;
+  --priority-low-soft: rgba(85, 88, 92, 0.16);
+
+  --status-positive: #4f9d6e;
+  --status-positive-soft: rgba(79, 157, 110, 0.14);
+  --status-caution: #c9974a;
+  --status-caution-soft: rgba(201, 151, 74, 0.14);
+  --status-negative: #b5544a;
+  --status-negative-soft: rgba(181, 84, 74, 0.14);
+  --status-neutral: #6b6e73;
+  --status-neutral-soft: rgba(107, 110, 115, 0.14);
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-background-elevated: var(--background-elevated);
+  --color-surface: var(--surface);
+  --color-surface-strong: var(--surface-strong);
+  --color-border-subtle: var(--border-subtle);
+  --color-border-strong: var(--border-strong);
+  --color-foreground: var(--foreground);
+  --color-foreground-muted: var(--foreground-muted);
+  --color-foreground-faint: var(--foreground-faint);
+
+  --color-accent: var(--accent);
+  --color-accent-soft: var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+
+  --color-priority-high: var(--priority-high);
+  --color-priority-high-soft: var(--priority-high-soft);
+  --color-priority-medium: var(--priority-medium);
+  --color-priority-medium-soft: var(--priority-medium-soft);
+  --color-priority-low: var(--priority-low);
+  --color-priority-low-soft: var(--priority-low-soft);
+
+  --color-status-positive: var(--status-positive);
+  --color-status-positive-soft: var(--status-positive-soft);
+  --color-status-caution: var(--status-caution);
+  --color-status-caution-soft: var(--status-caution-soft);
+  --color-status-negative: var(--status-negative);
+  --color-status-negative-soft: var(--status-negative-soft);
+  --color-status-neutral: var(--status-neutral);
+  --color-status-neutral-soft: var(--status-neutral-soft);
+
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+* {
+  border-color: var(--border-subtle);
+}
+
+html {
+  color-scheme: dark;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans), "Segoe UI", Arial, sans-serif;
+}
+
+::selection {
+  background: var(--accent-soft);
+  color: var(--foreground);
+}
+
+/* Thin, dark scrollbars -- default browser scrollbars read as unfinished on a premium dark surface. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-strong) transparent;
+}
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+*::-webkit-scrollbar-thumb {
+  background: var(--border-strong);
+  border-radius: 999px;
+}
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* Flat, bordered surface -- deliberately no backdrop-filter/blur (glassmorphism)
+   and no glow/inset highlight. A premium intelligence product reads as
+   solid and precise, not translucent. */
+.panel {
+  background: var(--surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 10px;
+  box-shadow: 0 10px 28px -18px rgba(0, 0, 0, 0.65);
+}
+
+.panel-hover {
+  transition: border-color 160ms ease, box-shadow 160ms ease;
+}
+.panel-hover:hover {
+  border-color: var(--border-strong);
+  box-shadow: 0 14px 34px -18px rgba(0, 0, 0, 0.75);
+}
+
+@keyframes fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.animate-fade-up {
+  animation: fade-up 320ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.35; }
+}
+.animate-pulse-dot {
+  animation: pulse-dot 2.2s ease-in-out infinite;
+}
