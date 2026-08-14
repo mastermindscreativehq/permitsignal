@@ -43,10 +43,12 @@ from backend.app.services.applicant_enrichment import find_role_person_mentions
 from backend.app.services.opportunity_builder import contact_tier, qualify_lead
 from backend.app.services.commercial_lead_intelligence import (
     ACTION_CONTACT_PARTY,
+    ACTION_INVESTIGATE_DECISION_MAKER,
     apply_commercial_intelligence,
     build_commercial_intelligence,
     find_contactable_party,
 )
+from backend.app.services.lead_repository import lead_to_row
 from backend.app.services.pipeline_orchestrator import run_pipeline, DEFAULT_PDF
 from datetime import date
 
@@ -271,6 +273,43 @@ def main():
                 "Real packet: Tyson Reynolds' project owner is found (REYNOLDS ASSET MANAGEMENT LLC)",
             )
         )
+
+        # Regression coverage for the production bug where PLRZ20260116's
+        # staff-report-derived owner evidence never reached the final lead
+        # returned by the API (owner_name/owner_entity/owner_type null,
+        # recommended_commercial_action stuck on the no-identity-at-all
+        # "enrich missing contact information" action). The staff-report
+        # extraction itself was already covered above; this closes the
+        # loop end-to-end through commercial intelligence and the
+        # Supabase row-mapping boundary so a future regression here is
+        # caught by this test instead of only showing up as stale/null
+        # production data.
+        results.append(
+            check(
+                bool(reynolds) and reynolds.get("owner_name") == "REYNOLDS ASSET MANAGEMENT LLC",
+                "Real packet: owner_name (not just owner_entity) is populated for Tyson Reynolds",
+            )
+        )
+        results.append(
+            check(
+                bool(reynolds)
+                and reynolds.get("recommended_commercial_action") == ACTION_INVESTIGATE_DECISION_MAKER
+                and "REYNOLDS ASSET MANAGEMENT LLC" in (reynolds.get("commercial_action_reason") or ""),
+                "Real packet: known-owner-no-contact correctly recommends investigating the "
+                "decision-maker by name, not the generic 'no identity at all' action",
+            )
+        )
+        if reynolds:
+            reynolds_row = lead_to_row(reynolds)
+            results.append(
+                check(
+                    reynolds_row.get("owner_entity") == "REYNOLDS ASSET MANAGEMENT LLC"
+                    and reynolds_row.get("owner_name") == "REYNOLDS ASSET MANAGEMENT LLC",
+                    "Real packet: owner evidence survives the Supabase row-mapping boundary "
+                    "(lead_repository.lead_to_row), so a synced lead never regresses to null",
+                )
+            )
+
         results.append(
             check(
                 bool(nelson) and nelson.get("owner_entity") == "TRACE LLC",
