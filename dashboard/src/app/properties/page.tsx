@@ -17,6 +17,10 @@ type SearchParams = Promise<{
   contactability?: string;
   event?: string;
   friction?: string;
+  readiness?: string;
+  stage?: string;
+  approval?: string;
+  recent?: string;
 }>;
 
 export default async function PropertyIntelligencePage({
@@ -35,6 +39,10 @@ export default async function PropertyIntelligencePage({
     contactability: params.contactability as LeadFilters["contactability"],
     upcomingEvent: params.event as LeadFilters["upcomingEvent"],
     friction: params.friction as LeadFilters["friction"],
+    readiness: params.readiness as LeadFilters["readiness"],
+    outreachStage: params.stage as LeadFilters["outreachStage"],
+    approvalBucket: params.approval as LeadFilters["approvalBucket"],
+    recentlySubmitted: params.recent as LeadFilters["recentlySubmitted"],
   };
 
   const filtered = filterLeads(leads, filters);
@@ -42,9 +50,9 @@ export default async function PropertyIntelligencePage({
   return (
     <div className="flex flex-col gap-6">
       <PageHeader
-        eyebrow="Property Intelligence"
-        title="Property Intelligence"
-        description={`${filtered.length} of ${leads.length} properties shown, ranked by opportunity score. Owner, applicant, and government staff are tracked as distinct parties.`}
+        eyebrow="Opportunities"
+        title="Opportunity Queue"
+        description={`${filtered.length} of ${leads.length} government-project opportunities shown, ranked by score. Owner, applicant/company, and government staff are tracked as distinct parties -- a missing owner never hides an identified applicant or company.`}
       />
 
       {leads.length === 0 ? (

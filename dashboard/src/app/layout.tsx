@@ -16,9 +16,9 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PermitSignal — Property Intelligence Platform",
+  title: "PermitSignal — Commercial Intelligence Platform",
   description:
-    "Property and permit intelligence from government planning packets: owner identification, friction history, upcoming events, opportunity scoring, and verified public contact intelligence.",
+    "Government-project intelligence from planning packets: applicant/owner/company identification, friction history, upcoming events, opportunity scoring, and verified public contact intelligence.",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

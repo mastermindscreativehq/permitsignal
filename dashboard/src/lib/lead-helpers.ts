@@ -35,12 +35,27 @@ export function getPrimaryOwnerDisplay(lead: Lead): {
 
 /**
  * The primary commercially relevant party: the Property Owner when the
- * source document names one, otherwise the Applicant of Record/Agent.
- * Never fabricates an owner -- when no owner is on record, this is simply
- * the applicant, clearly labeled as such by isOwnerKnown().
+ * source document names one, otherwise the Applicant of Record/Agent, then
+ * the Company on record. Never fabricates an owner -- when no owner is on
+ * record, this is simply the next real identified party, clearly labeled
+ * as such by getPrimaryPartyRole().
  */
 export function getPrimaryPartyName(lead: Lead): string {
-  return getPrimaryOwnerDisplay(lead).primary ?? lead.applicant_name ?? "Unknown";
+  return getPrimaryOwnerDisplay(lead).primary ?? lead.applicant_name ?? lead.company_name ?? "Unknown";
+}
+
+/**
+ * Which role getPrimaryPartyName() actually resolved to. A missing owner is
+ * not "this lead has no party" -- it's "the next real party is the
+ * applicant/company" -- so the UI should label the headline with the role
+ * that's actually backing it, not a blanket "Owner" (see CLAUDE.md section
+ * 7/9 -- never call everything "owner", never present absence as failure).
+ */
+export function getPrimaryPartyRole(lead: Lead): "Owner" | "Applicant" | "Company" | "Unknown" {
+  if (isOwnerKnown(lead)) return "Owner";
+  if (lead.applicant_name) return "Applicant";
+  if (lead.company_name) return "Company";
+  return "Unknown";
 }
 
 export function isOwnerKnown(lead: Lead): boolean {
@@ -87,6 +102,66 @@ export function hasFriction(lead: Lead): boolean {
   return (lead.friction_score ?? 0) > 0;
 }
 
+// Phase 6 commercial_readiness buckets -- see backend/app/services/
+// commercial_lead_intelligence.py for the vocabulary these read.
+export function isReadyForOutreach(lead: Lead): boolean {
+  return lead.commercial_readiness === "READY_FOR_OUTREACH";
+}
+
+export function needsContactEnrichment(lead: Lead): boolean {
+  return lead.commercial_readiness === "NEEDS_CONTACT_ENRICHMENT";
+}
+
+export function needsMoreEvidence(lead: Lead): boolean {
+  return lead.commercial_readiness === "NEEDS_MORE_PROJECT_EVIDENCE";
+}
+
+// Phase 8 outreach_status buckets -- see backend/app/services/
+// outreach_intelligence.py's OUTREACH_STATUS_* vocabulary/rank order.
+const CONTACTED_OUTREACH_STATUSES = new Set(["CONTACTED", "REPLIED", "ENGAGED"]);
+
+export function isContacted(lead: Lead): boolean {
+  return CONTACTED_OUTREACH_STATUSES.has(lead.outreach_status ?? "");
+}
+
+export function isOpportunityStage(lead: Lead): boolean {
+  return lead.outreach_status === "OPPORTUNITY";
+}
+
+// approval_status buckets -- see backend/app/services/
+// approval_action_intelligence.py's SIGNAL_PRIORITY/STATUS vocabulary.
+// "Pending" is awaiting a scheduled government decision; "denied/delayed"
+// is a negative or stalled outcome already on record.
+const PENDING_APPROVAL_STATUSES = new Set(["scheduled", "pending", "under_review"]);
+const DENIED_OR_DELAYED_STATUSES = new Set([
+  "denied",
+  "withdrawn",
+  "recommended_denial",
+  "tabled",
+  "continued",
+]);
+
+export function isPendingApproval(lead: Lead): boolean {
+  return PENDING_APPROVAL_STATUSES.has((lead.approval_status ?? "").toLowerCase());
+}
+
+export function isDeniedOrDelayed(lead: Lead): boolean {
+  return DENIED_OR_DELAYED_STATUSES.has((lead.approval_status ?? "").toLowerCase());
+}
+
+/**
+ * "Recently submitted" reads created_at -- the record's own creation
+ * timestamp, the only submission-adjacent evidence the pipeline persists
+ * (see docs/DATA_MODEL.md). Not a fabricated field; just a plain recency
+ * window over an existing one.
+ */
+export function isRecentlySubmitted(lead: Lead, withinDays = 30): boolean {
+  if (!lead.created_at) return false;
+  const created = new Date(lead.created_at).getTime();
+  if (Number.isNaN(created)) return false;
+  return Date.now() - created <= withinDays * 24 * 60 * 60 * 1000;
+}
+
 /**
  * Friction evidence lives in the raw "events" field for this pipeline (the
  * promoted friction_events field is currently always []) -- fall back to
@@ -120,8 +195,9 @@ export function computeDashboardStats(leads: Lead[]): DashboardStats {
   return {
     totalLeads: leads.length,
     highPriority: leads.filter((lead) => lead.priority === "HIGH").length,
+    readyForOutreach: leads.filter(isReadyForOutreach).length,
+    needsContactEnrichment: leads.filter(needsContactEnrichment).length,
     ownersIdentified: leads.filter(isOwnerKnown).length,
-    ownersNotFound: leads.filter((lead) => !isOwnerKnown(lead)).length,
     contactable: leads.filter(isContactable).length,
     needingDiscovery: leads.filter(needsContactDiscovery).length,
     upcomingEvents: leads.filter(hasUpcomingEvent).length,
@@ -157,6 +233,12 @@ export function filterLeads(leads: Lead[], filters: LeadFilters): Lead[] {
     if (filters.upcomingEvent === "no" && hasUpcomingEvent(lead)) return false;
     if (filters.friction === "yes" && !hasFriction(lead)) return false;
     if (filters.friction === "no" && hasFriction(lead)) return false;
+    if (filters.readiness && lead.commercial_readiness !== filters.readiness) return false;
+    if (filters.outreachStage === "contacted" && !isContacted(lead)) return false;
+    if (filters.outreachStage === "opportunity" && !isOpportunityStage(lead)) return false;
+    if (filters.approvalBucket === "pending" && !isPendingApproval(lead)) return false;
+    if (filters.approvalBucket === "denied_delayed" && !isDeniedOrDelayed(lead)) return false;
+    if (filters.recentlySubmitted === "yes" && !isRecentlySubmitted(lead)) return false;
     return true;
   });
 }

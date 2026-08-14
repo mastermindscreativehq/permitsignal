@@ -234,13 +234,20 @@ export interface Lead {
 export interface DashboardStats {
   totalLeads: number;
   highPriority: number;
+  readyForOutreach: number;
+  needsContactEnrichment: number;
   ownersIdentified: number;
-  ownersNotFound: number;
   contactable: number;
   needingDiscovery: number;
   upcomingEvents: number;
   priorityDistribution: { priority: Priority; count: number }[];
 }
+
+export type CommercialReadiness =
+  | "READY_FOR_OUTREACH"
+  | "NEEDS_CONTACT_ENRICHMENT"
+  | "NEEDS_MORE_PROJECT_EVIDENCE"
+  | "NOT_READY";
 
 export interface LeadFilters {
   priority?: Priority;
@@ -249,4 +256,11 @@ export interface LeadFilters {
   contactability?: "contactable" | "needs_discovery";
   upcomingEvent?: "yes" | "no";
   friction?: "yes" | "no";
+  // Phase 6 commercial_readiness -- "who should I contact and why" queue filters.
+  readiness?: CommercialReadiness;
+  // Phase 8 outreach_status buckets -- "already contacted" / "became a real deal".
+  outreachStage?: "contacted" | "opportunity";
+  // approval_status buckets -- awaiting a government decision vs. a negative/stalled one.
+  approvalBucket?: "pending" | "denied_delayed";
+  recentlySubmitted?: "yes";
 }

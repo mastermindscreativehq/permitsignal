@@ -20,7 +20,7 @@ export default function LeadNotFound() {
           href="/properties"
           className="mt-2 rounded-md border border-border-subtle bg-surface px-3.5 py-2 text-sm font-medium text-foreground transition-colors hover:border-accent hover:text-accent-strong"
         >
-          ← Back to Property Intelligence
+          ← Back to Opportunities
         </Link>
       </div>
     </div>

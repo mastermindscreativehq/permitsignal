@@ -5,7 +5,8 @@ import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   { href: "/", label: "Overview" },
-  { href: "/properties", label: "Property Intelligence" },
+  { href: "/properties", label: "Opportunities" },
+  { href: "/properties?readiness=READY_FOR_OUTREACH", label: "Ready for Outreach" },
   { href: "/properties?event=yes", label: "Upcoming Events" },
   { href: "/properties?friction=yes", label: "Friction" },
   { href: "/properties?contactability=needs_discovery", label: "Contact Intel." },

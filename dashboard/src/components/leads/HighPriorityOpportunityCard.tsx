@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Lead } from "@/lib/types";
-import { getPrimaryPartyName, isContactable, isOwnerKnown, needsContactDiscovery } from "@/lib/lead-helpers";
+import { getPrimaryPartyName, getPrimaryPartyRole, isContactable, isOwnerKnown, needsContactDiscovery } from "@/lib/lead-helpers";
 import { approvalStatusVariant, formatDate, formatDaysUntil, leadStatusVariant, priorityVariant, titleCase } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 
@@ -18,7 +18,7 @@ export function HighPriorityOpportunityCard({ lead }: { lead: Lead }) {
       <div className="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row sm:items-center sm:gap-6">
         <div className="min-w-0 sm:w-[220px]">
           <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-faint">
-            {ownerKnown ? "Owner" : "Applicant — owner not found"}
+            {getPrimaryPartyRole(lead)}
           </p>
           <p className={`truncate text-sm font-semibold ${ownerKnown ? "text-foreground" : "text-foreground-muted"}`}>
             {getPrimaryPartyName(lead)}
@@ -49,6 +49,12 @@ export function HighPriorityOpportunityCard({ lead }: { lead: Lead }) {
           <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-faint">Approval Action</p>
           <p className="truncate text-sm text-foreground-muted">
             {lead.approval_action ? titleCase(lead.approval_action) : "Unknown"}
+          </p>
+        </div>
+        <div className="min-w-0 sm:w-[190px]">
+          <p className="text-[10px] font-medium uppercase tracking-wide text-foreground-faint">Recommended Action</p>
+          <p className="truncate text-sm text-foreground-muted">
+            {lead.recommended_commercial_action ? titleCase(lead.recommended_commercial_action) : "—"}
           </p>
         </div>
       </div>

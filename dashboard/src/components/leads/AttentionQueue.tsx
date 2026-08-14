@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Lead } from "@/lib/types";
-import { getPrimaryPartyName, hasFriction, isContactable, isOwnerKnown } from "@/lib/lead-helpers";
+import { getPrimaryPartyName, getPrimaryPartyRole, hasFriction, isContactable, isOwnerKnown } from "@/lib/lead-helpers";
 import { formatDate, leadStatusVariant, priorityVariant, titleCase, urgencyVariant } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
 
@@ -18,7 +18,7 @@ export function AttentionQueue({ leads, limit = 8 }: { leads: Lead[]; limit?: nu
 
   if (queue.length === 0) {
     return (
-      <div className="panel p-8 text-center text-sm text-foreground-faint">No properties on record yet.</div>
+      <div className="panel p-8 text-center text-sm text-foreground-faint">No opportunities on record yet.</div>
     );
   }
 
@@ -28,7 +28,7 @@ export function AttentionQueue({ leads, limit = 8 }: { leads: Lead[]; limit?: nu
         <table className="w-full min-w-[860px] text-left text-sm">
           <thead>
             <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wide text-foreground-faint">
-              <th className="px-4 py-3 font-medium">Owner</th>
+              <th className="px-4 py-3 font-medium">Who</th>
               <th className="px-4 py-3 font-medium">Property</th>
               <th className="px-4 py-3 font-medium">Next Event</th>
               <th className="px-4 py-3 font-medium">Friction</th>
@@ -53,7 +53,7 @@ export function AttentionQueue({ leads, limit = 8 }: { leads: Lead[]; limit?: nu
                       {getPrimaryPartyName(lead)}
                     </Link>
                     <p className="text-[10px] uppercase tracking-wide text-foreground-faint">
-                      {ownerKnown ? "Owner" : "Owner not found"}
+                      {getPrimaryPartyRole(lead)}
                     </p>
                   </td>
                   <td className="max-w-[200px] px-4 py-3">

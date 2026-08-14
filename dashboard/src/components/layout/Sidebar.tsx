@@ -17,10 +17,15 @@ const NAV_ITEMS = [
   },
   {
     href: "/properties",
-    label: "Property Intelligence",
+    label: "Opportunities",
     icon: (
       <path strokeLinecap="round" strokeLinejoin="round" d="M4 6h16M4 12h16M4 18h10" />
     ),
+  },
+  {
+    href: "/properties?readiness=READY_FOR_OUTREACH",
+    label: "Ready for Outreach",
+    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />,
   },
   {
     href: "/properties?event=yes",
@@ -40,7 +45,7 @@ const NAV_ITEMS = [
   },
   {
     href: "/properties?contactability=needs_discovery",
-    label: "Contact Intelligence",
+    label: "Needs Contact Discovery",
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v11H8l-4 4V5Z" />,
   },
 ];
@@ -65,7 +70,7 @@ export function Sidebar() {
         </div>
         <div>
           <p className="text-sm font-semibold leading-tight text-foreground">PermitSignal</p>
-          <p className="text-[11px] leading-tight text-foreground-faint">Property Intelligence</p>
+          <p className="text-[11px] leading-tight text-foreground-faint">Commercial Intelligence</p>
         </div>
       </div>
 

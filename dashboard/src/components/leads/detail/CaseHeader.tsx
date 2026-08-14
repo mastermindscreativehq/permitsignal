@@ -1,7 +1,7 @@
 import Link from "next/link";
 import type { Lead } from "@/lib/types";
-import { formatDate, formatDateTime, leadStatusVariant, priorityVariant, titleCase } from "@/lib/format";
-import { getPrimaryOwnerDisplay, hasUpcomingEvent, isOwnerKnown } from "@/lib/lead-helpers";
+import { commercialReadinessVariant, formatDate, formatDateTime, leadStatusVariant, priorityVariant, titleCase } from "@/lib/format";
+import { getPrimaryOwnerDisplay, getPrimaryPartyRole, hasUpcomingEvent } from "@/lib/lead-helpers";
 import { Badge } from "@/components/ui/Badge";
 
 // The backend FastAPI service (see lib/leads.ts) that serves generated
@@ -19,7 +19,6 @@ const PERMITSIGNAL_API_URL = process.env.PERMITSIGNAL_API_URL ?? "http://localho
  * another visualization.
  */
 export function CaseHeader({ lead }: { lead: Lead }) {
-  const ownerKnown = isOwnerKnown(lead);
   const { primary: ownerPrimary, contactName: ownerContactName } = getPrimaryOwnerDisplay(lead);
   const showApplicantLine = Boolean(lead.applicant_name) && lead.applicant_name !== ownerPrimary;
   const upcoming = hasUpcomingEvent(lead);
@@ -27,15 +26,15 @@ export function CaseHeader({ lead }: { lead: Lead }) {
   return (
     <div>
       <Link href="/properties" className="text-xs font-medium text-foreground-muted hover:text-foreground">
-        ← Back to Property Intelligence
+        ← Back to Opportunities
       </Link>
       <div className="mt-3 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.18em] text-accent-strong">
-            {ownerKnown ? "Property Owner" : "Property Owner — Not Found"}
+            {getPrimaryPartyRole(lead)}
           </p>
           <h1 className="mt-1 text-2xl font-semibold tracking-tight text-foreground sm:text-[28px]">
-            {ownerPrimary ?? lead.applicant_name ?? "Unknown"}
+            {ownerPrimary ?? lead.applicant_name ?? lead.company_name ?? "Unknown"}
           </h1>
           <p className="mt-1 text-sm text-foreground-muted">
             {lead.application_type} · {lead.application_number} · {lead.project_address ?? "No address on record"}
@@ -62,7 +61,17 @@ export function CaseHeader({ lead }: { lead: Lead }) {
             <Badge variant={leadStatusVariant(lead.lead_status)}>
               {(lead.lead_status ?? "NOT_RUN").replaceAll("_", " ")}
             </Badge>
+            {lead.commercial_readiness && (
+              <Badge variant={commercialReadinessVariant(lead.commercial_readiness)}>
+                {lead.commercial_readiness.replaceAll("_", " ")}
+              </Badge>
+            )}
           </div>
+          {lead.recommended_commercial_action && (
+            <p className="max-w-[260px] text-right text-xs text-foreground-faint">
+              Next: {titleCase(lead.recommended_commercial_action)}
+            </p>
+          )}
           <a
             href={`${PERMITSIGNAL_API_URL}/leads/${lead.application_number}/report.pdf`}
             target="_blank"

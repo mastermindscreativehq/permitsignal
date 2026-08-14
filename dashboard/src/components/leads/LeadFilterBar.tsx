@@ -49,9 +49,18 @@ export function LeadFilterBar({ applicationTypes }: { applicationTypes: string[]
     router.push(`/properties${params.toString() ? `?${params.toString()}` : ""}`);
   };
 
-  const hasFilters = ["priority", "status", "type", "contactability", "event", "friction"].some((key) =>
-    searchParams.get(key)
-  );
+  const hasFilters = [
+    "priority",
+    "status",
+    "type",
+    "contactability",
+    "event",
+    "friction",
+    "readiness",
+    "stage",
+    "approval",
+    "recent",
+  ].some((key) => searchParams.get(key));
 
   return (
     <div className="panel flex flex-wrap items-end gap-4 p-4">
@@ -105,6 +114,45 @@ export function LeadFilterBar({ applicationTypes }: { applicationTypes: string[]
           { value: "yes", label: "Has Event" },
           { value: "no", label: "No Event" },
         ]}
+      />
+      <Select
+        label="Readiness"
+        paramKey="readiness"
+        value={searchParams.get("readiness") ?? ""}
+        onChange={update}
+        options={[
+          { value: "READY_FOR_OUTREACH", label: "Ready for Outreach" },
+          { value: "NEEDS_CONTACT_ENRICHMENT", label: "Needs Enrichment" },
+          { value: "NEEDS_MORE_PROJECT_EVIDENCE", label: "Needs Evidence" },
+          { value: "NOT_READY", label: "Not Ready" },
+        ]}
+      />
+      <Select
+        label="Outreach"
+        paramKey="stage"
+        value={searchParams.get("stage") ?? ""}
+        onChange={update}
+        options={[
+          { value: "contacted", label: "Contacted" },
+          { value: "opportunity", label: "Opportunity" },
+        ]}
+      />
+      <Select
+        label="Approval"
+        paramKey="approval"
+        value={searchParams.get("approval") ?? ""}
+        onChange={update}
+        options={[
+          { value: "pending", label: "Pending" },
+          { value: "denied_delayed", label: "Denied / Delayed" },
+        ]}
+      />
+      <Select
+        label="Submitted"
+        paramKey="recent"
+        value={searchParams.get("recent") ?? ""}
+        onChange={update}
+        options={[{ value: "yes", label: "Recently Submitted" }]}
       />
       {hasFilters && (
         <button

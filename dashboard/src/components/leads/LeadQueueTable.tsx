@@ -1,14 +1,22 @@
 import Link from "next/link";
 import type { Lead } from "@/lib/types";
-import { getPrimaryPartyName, isContactable, isOwnerKnown, needsContactDiscovery } from "@/lib/lead-helpers";
+import { getPrimaryPartyName, getPrimaryPartyRole, isContactable, isOwnerKnown, needsContactDiscovery } from "@/lib/lead-helpers";
 import { Badge } from "@/components/ui/Badge";
-import { approvalStatusVariant, formatDate, formatDaysUntil, leadStatusVariant, priorityVariant, titleCase } from "@/lib/format";
+import {
+  approvalStatusVariant,
+  commercialReadinessVariant,
+  formatDate,
+  formatDaysUntil,
+  leadStatusVariant,
+  priorityVariant,
+  titleCase,
+} from "@/lib/format";
 
 export function LeadQueueTable({ leads }: { leads: Lead[] }) {
   if (leads.length === 0) {
     return (
       <div className="panel p-10 text-center">
-        <p className="text-sm font-medium text-foreground">No properties match these filters</p>
+        <p className="text-sm font-medium text-foreground">No opportunities match these filters</p>
         <p className="mt-1 text-xs text-foreground-faint">Adjust or clear filters to see more of the queue.</p>
       </div>
     );
@@ -17,10 +25,10 @@ export function LeadQueueTable({ leads }: { leads: Lead[] }) {
   return (
     <div className="panel overflow-hidden">
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1120px] text-left text-sm">
+        <table className="w-full min-w-[1280px] text-left text-sm">
           <thead>
             <tr className="border-b border-border-subtle text-[11px] uppercase tracking-wide text-foreground-faint">
-              <th className="px-4 py-3 font-medium">Owner</th>
+              <th className="px-4 py-3 font-medium">Who</th>
               <th className="px-4 py-3 font-medium">Property</th>
               <th className="px-4 py-3 font-medium">Project</th>
               <th className="px-4 py-3 font-medium">Friction</th>
@@ -28,6 +36,7 @@ export function LeadQueueTable({ leads }: { leads: Lead[] }) {
               <th className="px-4 py-3 font-medium">Approval Action</th>
               <th className="px-4 py-3 font-medium">Priority</th>
               <th className="px-4 py-3 font-medium">Contact</th>
+              <th className="px-4 py-3 font-medium">Next Action</th>
             </tr>
           </thead>
           <tbody>
@@ -48,7 +57,7 @@ export function LeadQueueTable({ leads }: { leads: Lead[] }) {
                       {getPrimaryPartyName(lead)}
                     </Link>
                     <p className="text-[10px] uppercase tracking-wide text-foreground-faint">
-                      {ownerKnown ? "Owner" : "Applicant — owner not found"}
+                      {getPrimaryPartyRole(lead)}
                     </p>
                     {ownerKnown && lead.applicant_name && lead.applicant_name !== getPrimaryPartyName(lead) && (
                       <p className="truncate text-[11px] text-foreground-faint">Agent: {lead.applicant_name}</p>
@@ -104,6 +113,22 @@ export function LeadQueueTable({ leads }: { leads: Lead[] }) {
                     <Badge variant={leadStatusVariant(lead.lead_status)}>
                       {contactable ? "Contactable" : needsDiscovery ? titleCase(lead.lead_status ?? "No contact") : titleCase(lead.lead_status)}
                     </Badge>
+                  </td>
+                  <td className="max-w-[190px] px-4 py-3.5">
+                    {lead.recommended_commercial_action ? (
+                      <>
+                        {lead.commercial_readiness && (
+                          <Badge variant={commercialReadinessVariant(lead.commercial_readiness)}>
+                            {lead.commercial_readiness.replaceAll("_", " ")}
+                          </Badge>
+                        )}
+                        <p className="mt-1 truncate text-[11px] text-foreground-faint">
+                          {titleCase(lead.recommended_commercial_action)}
+                        </p>
+                      </>
+                    ) : (
+                      <span className="text-[11px] text-foreground-faint">—</span>
+                    )}
                   </td>
                 </tr>
               );
