@@ -44,6 +44,7 @@ export function ContactIntelligenceCard({ lead }: { lead: Lead }) {
         <Field label="Phone Confidence" value={lead.phone_confidence ? titleCase(lead.phone_confidence) : null} />
         <Field label="Public" value={lead.contact_is_public === null ? null : lead.contact_is_public ? "Yes" : "No"} />
         <Field label="Verified" value={lead.contact_is_verified === null ? null : lead.contact_is_verified ? "Yes" : "No"} />
+        <Field label="Contactability" value={lead.contactability_level ? titleCase(lead.contactability_level) : null} />
       </div>
     </SectionCard>
   );

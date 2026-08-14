@@ -32,6 +32,9 @@ export function OutreachCard({ lead }: { lead: Lead }) {
           {outreachStatus && (
             <Badge variant={outreachStatusVariant(outreachStatus)}>{outreachStatus.replaceAll("_", " ")}</Badge>
           )}
+          {lead.outreach_qualification_status && (
+            <Badge variant="status-neutral">{lead.outreach_qualification_status.replaceAll("_", " ")}</Badge>
+          )}
           {readiness && (
             <Badge variant={commercialReadinessVariant(readiness)}>{readiness.replaceAll("_", " ")}</Badge>
           )}

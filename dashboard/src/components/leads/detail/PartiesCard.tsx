@@ -1,6 +1,7 @@
 import type { Lead } from "@/lib/types";
 import { titleCase } from "@/lib/format";
 import { getPartiesByRole, getPrimaryOwnerDisplay, isOwnerKnown } from "@/lib/lead-helpers";
+import { Badge } from "@/components/ui/Badge";
 import { SectionCard } from "./SectionCard";
 import { ContactField, Field } from "./Field";
 
@@ -65,7 +66,14 @@ export function PartiesCard({ lead }: { lead: Lead }) {
       <div className={`rounded-md border p-4 ${ownerKnown ? "border-accent/35 bg-accent-soft/25" : "border-border-subtle bg-surface"}`}>
         <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-accent-strong">Property Owner</p>
         {ownerPrimary ? (
-          <p className="mt-1 text-lg font-semibold leading-tight text-foreground">{ownerPrimary}</p>
+          <p className="mt-1 flex flex-wrap items-center gap-2 text-lg font-semibold leading-tight text-foreground">
+            {ownerPrimary}
+            {lead.owner_type && (
+              <Badge variant="accent" dot={false}>
+                {titleCase(lead.owner_type)}
+              </Badge>
+            )}
+          </p>
         ) : (
           <p className="mt-1 inline-flex items-center gap-1.5 text-lg italic text-foreground-faint/70">
             <span className="h-2 w-2 rounded-full bg-status-neutral" />
