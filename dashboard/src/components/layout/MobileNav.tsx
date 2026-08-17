@@ -6,10 +6,9 @@ import { usePathname } from "next/navigation";
 const NAV_ITEMS = [
   { href: "/", label: "Overview" },
   { href: "/properties", label: "Opportunities" },
-  { href: "/properties?readiness=READY_FOR_OUTREACH", label: "Ready for Outreach" },
-  { href: "/properties?event=yes", label: "Upcoming Events" },
-  { href: "/properties?friction=yes", label: "Friction" },
-  { href: "/properties?contactability=needs_discovery", label: "Contact Intel." },
+  { href: "/ready-for-outreach", label: "Outreach" },
+  { href: "/upcoming", label: "Events" },
+  { href: "/contact-discovery", label: "Contacts" },
 ];
 
 export function MobileNav() {
@@ -25,13 +24,13 @@ export function MobileNav() {
       </div>
       <nav className="flex items-center gap-4 overflow-x-auto">
         {NAV_ITEMS.map((item) => {
-          const path = item.href.split("?")[0];
-          const active = pathname === path;
+          const isActive =
+            item.href === "/" ? pathname === "/" : pathname.startsWith(item.href);
           return (
             <Link
               key={item.href}
               href={item.href}
-              className={`whitespace-nowrap text-xs font-medium ${active ? "text-foreground" : "text-foreground-muted"}`}
+              className={`whitespace-nowrap text-xs font-medium ${isActive ? "text-foreground" : "text-foreground-muted"}`}
             >
               {item.label}
             </Link>

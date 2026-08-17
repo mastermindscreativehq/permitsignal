@@ -85,6 +85,7 @@ from __future__ import annotations
 from typing import Any, Iterable, Mapping, Optional
 
 from backend.app.services.commercial_lead_intelligence import (
+    CONTACT_LEVEL_NONE,
     READINESS_NEEDS_CONTACT_ENRICHMENT,
     READINESS_NEEDS_MORE_PROJECT_EVIDENCE,
     READINESS_NOT_READY,
@@ -623,6 +624,28 @@ def build_outreach_intelligence(
 
     qualification = classify_outreach_qualification(merged)
 
+    follow_up_required = bool(previous.get("follow_up_required", False))
+    follow_up_reason = previous.get("follow_up_reason")
+
+    # A lead already moved to CONTACTED-or-later is frozen there (see
+    # advance_outreach_status()) even if a later pipeline run finds this
+    # lead's contact evidence no longer verified -- re-enrichment can
+    # invalidate a previously-found contact. Silently leaving outreach_status
+    # at CONTACTED with no verified contact would misrepresent the lead as
+    # reachable. Surface this as an explicit review flag instead of
+    # resetting or hiding it.
+    if (
+        outreach_status not in _PRE_OUTREACH_STATUSES
+        and opportunity.get("contactability_level") == CONTACT_LEVEL_NONE
+        and not follow_up_required
+    ):
+        follow_up_required = True
+        follow_up_reason = (
+            f"outreach_status is {outreach_status}, but no verified contact "
+            "evidence currently exists for this lead. Contact information "
+            "may be stale -- needs review before further outreach."
+        )
+
     return {
         "outreach_status": outreach_status,
         "outreach_qualification_status": qualification,
@@ -631,8 +654,8 @@ def build_outreach_intelligence(
         "outreach_contact_reason": contact["reason"],
         "outreach_message_subject": message["subject"] if message else None,
         "outreach_message_body": message["body"] if message else None,
-        "follow_up_required": bool(previous.get("follow_up_required", False)),
-        "follow_up_reason": previous.get("follow_up_reason"),
+        "follow_up_required": follow_up_required,
+        "follow_up_reason": follow_up_reason,
         "last_outreach_at": previous.get("last_outreach_at"),
         "outreach_events": list(previous.get("outreach_events") or []),
     }

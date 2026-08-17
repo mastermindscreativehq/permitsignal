@@ -335,9 +335,120 @@ def main():
     print(f"TESTS: {passed} passed, {failed} failed")
     print("=" * 80)
 
-    if failed:
-        raise SystemExit(1)
+    return failed == 0
+
+
+def test_application_scoping() -> bool:
+    """
+    Regression coverage for cross-application date/evidence contamination.
+
+    A real government packet contains multiple applications in one PDF,
+    separated by "Item N" markers. Item 1 (a citywide ordinance text
+    amendment) has no date content of its own. Item 2 (a rezone) has its
+    own future project date and denial history.
+
+    Before the fix, enrich_application_dates() searched the ENTIRE packet
+    text for every application, so Item 1 silently inherited Item 2's
+    September 2, 2026 date and evidence. Each application must only ever
+    receive dates/evidence from its own Item N block.
+    """
+
+    print()
+    print("=" * 80)
+    print("APPLICATION-SCOPED DATE EXTRACTION (cross-application contamination)")
+    print("=" * 80)
+
+    text = """
+    * Item 1
+    PLOTA20260371
+    Development Services requests an Ordinance Text Amendment to Provo
+    City Code 14.34.290 to add Provo River Design Corridor standards.
+    Citywide Application.
+
+    * Item 2
+    PLRZ20260264
+    Jared Morgan requests approval of a Zone Map Amendment. The
+    application was ultimately denied by the Municipal Council on
+    December 2, 2025. This item will be presented at the September 2,
+    2026, West District neighborhood meeting.
+    """
+
+    # Reference date is AFTER the shared August 12 hearing has already
+    # passed, forcing the extractor to fall through to the next-nearest
+    # future date in the document -- exactly the condition that exposed
+    # the bug in real production data.
+    reference_date = date(2026, 8, 14)
+
+    item_1 = {
+        "application_number": "PLOTA20260371",
+        "item": 1,
+    }
+
+    item_2 = {
+        "application_number": "PLRZ20260264",
+        "item": 2,
+    }
+
+    enriched_1 = enrich_application_dates(item_1, text, reference_date)
+    enriched_2 = enrich_application_dates(item_2, text, reference_date)
+
+    print(f"Item 1 next_project_date:   {enriched_1.get('next_project_date')}")
+    print(f"Item 1 has_future_opportunity: {enriched_1.get('has_future_opportunity')}")
+    print(f"Item 1 project_dates:       {enriched_1.get('project_dates')}")
+    print(f"Item 2 next_project_date:   {enriched_2.get('next_project_date')}")
+    print(f"Item 2 has_future_opportunity: {enriched_2.get('has_future_opportunity')}")
+
+    results = []
+
+    results.append(
+        check(
+            enriched_1.get("next_project_date") is None,
+            "Item 1 (no date content of its own) receives no next_project_date",
+        )
+    )
+
+    results.append(
+        check(
+            enriched_1.get("has_future_opportunity") is False,
+            "Item 1 is not marked as a future opportunity",
+        )
+    )
+
+    results.append(
+        check(
+            enriched_1.get("project_dates") == [],
+            "Item 1 receives no dates at all from Item 2's text",
+        )
+    )
+
+    results.append(
+        check(
+            enriched_2.get("next_project_date") == "2026-09-02",
+            "Item 2 receives its own September 2, 2026 date",
+        )
+    )
+
+    results.append(
+        check(
+            enriched_2.get("has_future_opportunity") is True,
+            "Item 2 is correctly marked as a future opportunity",
+        )
+    )
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print()
+    print("=" * 80)
+    print(f"APPLICATION SCOPING TESTS: {passed} passed, {failed} failed")
+    print("=" * 80)
+
+    return failed == 0
 
 
 if __name__ == "__main__":
-    main()
+    main_ok = main()
+    scoping_ok = test_application_scoping()
+
+    if not (main_ok and scoping_ok):
+        raise SystemExit(1)

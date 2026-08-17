@@ -533,9 +533,102 @@ def main():
     print(f"TESTS: {passed} passed, {failed} failed")
     print("=" * 90)
 
-    if failed:
-        raise SystemExit(1)
+    return failed == 0
+
+
+def test_stale_contact_flag():
+    """
+    Regression coverage: outreach_status=CONTACTED must never coexist with
+    contactability_level=NO_VERIFIED_CONTACT without an explicit
+    stale/needs-review signal.
+
+    outreach_status is correctly frozen once a controlled event moves it
+    past READY_FOR_OUTREACH (advance_outreach_status()), so a later
+    pipeline run that finds this lead's contact evidence no longer
+    verified must not silently reset or hide that regression -- it must
+    flag it.
+    """
+
+    print("\n" + "=" * 90)
+    print("STALE CONTACT DETECTION (outreach_status vs. contactability_level)")
+    print("=" * 90)
+
+    results = []
+
+    contactable_opportunity = {
+        "application_number": "PLRZ20260264",
+        "applicant_name": "Jared Morgan",
+        "commercial_readiness": READINESS_READY_FOR_OUTREACH,
+        "contactability_level": "VERIFIED_PERSON_CONTACT",
+        "applicant_email": "jared.morgan@acme-development.com",
+    }
+
+    first_pass = apply_outreach_intelligence([contactable_opportunity])[0]
+    contacted = apply_outreach_event(
+        first_pass,
+        "outreach_sent",
+        occurred_at="2026-08-02T00:00:00+00:00",
+    )
+    previous_by_number = {"PLRZ20260264": contacted}
+
+    # A later pipeline run finds no verified contact evidence for the same
+    # real-world lead (e.g. re-enrichment invalidated the prior contact).
+    regressed_opportunity = dict(contactable_opportunity)
+    regressed_opportunity["commercial_readiness"] = READINESS_NEEDS_CONTACT_ENRICHMENT
+    regressed_opportunity["contactability_level"] = "NO_VERIFIED_CONTACT"
+    regressed_opportunity.pop("applicant_email", None)
+
+    rerun = apply_outreach_intelligence([regressed_opportunity], previous_by_number)[0]
+
+    results.append(
+        check(
+            rerun["outreach_status"] == OUTREACH_STATUS_CONTACTED,
+            "A lead's real CONTACTED history is preserved even after its "
+            "contact evidence regresses",
+        )
+    )
+    results.append(
+        check(
+            rerun["follow_up_required"] is True,
+            "A CONTACTED lead whose contact evidence has since regressed "
+            "is flagged for review",
+        )
+    )
+    results.append(
+        check(
+            bool(rerun.get("follow_up_reason"))
+            and "CONTACTED" in rerun["follow_up_reason"]
+            and "contact" in rerun["follow_up_reason"].lower(),
+            "The stale-contact flag carries an explicit, evidence-based reason",
+        )
+    )
+
+    # Sanity: a healthy CONTACTED lead whose contact evidence is still
+    # intact must never be falsely flagged.
+    healthy_rerun = apply_outreach_intelligence(
+        [contactable_opportunity],
+        previous_by_number,
+    )[0]
+
+    results.append(
+        check(
+            healthy_rerun["follow_up_required"] is False,
+            "A CONTACTED lead with intact contact evidence is not falsely "
+            "flagged as stale",
+        )
+    )
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print(f"\nSTALE CONTACT TESTS: {passed} passed, {failed} failed")
+
+    return failed == 0
 
 
 if __name__ == "__main__":
-    main()
+    main_ok = main()
+    stale_ok = test_stale_contact_flag()
+
+    if not (main_ok and stale_ok):
+        raise SystemExit(1)

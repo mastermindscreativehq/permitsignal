@@ -2,12 +2,10 @@ import { getLeads } from "@/lib/leads";
 import { filterLeads, getApplicationTypes } from "@/lib/lead-helpers";
 import type { LeadFilters, LeadStatus, Priority } from "@/lib/types";
 import { PageHeader } from "@/components/layout/PageHeader";
-import { LeadFilterBar } from "@/components/leads/LeadFilterBar";
+import { OpportunityFilters } from "@/components/leads/OpportunityFilters";
 import { LeadQueueTable } from "@/components/leads/LeadQueueTable";
 
 export const dynamic = "force-dynamic";
-// See src/app/page.tsx -- the PermitSignal API's /leads call has been
-// observed taking ~11s in production, past Vercel's 10s serverless default.
 export const maxDuration = 30;
 
 type SearchParams = Promise<{
@@ -21,6 +19,7 @@ type SearchParams = Promise<{
   stage?: string;
   approval?: string;
   recent?: string;
+  tab?: string;
 }>;
 
 export default async function PropertyIntelligencePage({
@@ -52,20 +51,19 @@ export default async function PropertyIntelligencePage({
       <PageHeader
         eyebrow="Opportunities"
         title="Opportunity Queue"
-        description={`${filtered.length} of ${leads.length} government-project opportunities shown, ranked by score. Owner, applicant/company, and government staff are tracked as distinct parties -- a missing owner never hides an identified applicant or company.`}
+        description={`${filtered.length} of ${leads.length} opportunities, ranked by commercial potential.`}
       />
 
       {leads.length === 0 ? (
         <div className="panel p-10 text-center">
-          <p className="text-sm font-medium text-foreground">No leads on record yet</p>
+          <p className="text-sm font-medium text-foreground">No opportunities on record</p>
           <p className="mt-1 text-xs text-foreground-faint">
-            The PermitSignal API returned zero leads. Run the pipeline against a government packet to populate the
-            queue.
+            The PermitSignal API returned zero leads. Run the pipeline against a government packet to populate the queue.
           </p>
         </div>
       ) : (
         <>
-          <LeadFilterBar applicationTypes={applicationTypes} />
+          <OpportunityFilters applicationTypes={applicationTypes} />
 
           <LeadQueueTable
             leads={[...filtered].sort((a, b) => (b.priority_score ?? 0) - (a.priority_score ?? 0))}

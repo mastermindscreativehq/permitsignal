@@ -148,15 +148,41 @@ def _line_bounds(text: str, position: int) -> tuple[int, int]:
     return left, right
 
 
+def _is_paragraph_break(text: str, index: int) -> bool:
+    """
+    PDF extraction wraps a single sentence across multiple lines with one
+    "\\n". Treating every "\\n" as a sentence end splits a hearing
+    announcement's date away from the "public hearing" phrase on the
+    previous line. A newline only ends a sentence when it is a genuine
+    paragraph break (a blank line), not a mid-sentence line wrap.
+    """
+
+    if text[index] != "\n":
+        return False
+
+    j = index + 1
+
+    while j < len(text) and text[j] in " \t":
+        j += 1
+
+    return j < len(text) and text[j] == "\n"
+
+
 def _sentence_bounds(text: str, position: int) -> tuple[int, int]:
-    separators = ".!?;\n"
+    separators = ".!?;"
 
     left = position
-    while left > 0 and text[left - 1] not in separators:
+    while left > 0 and (
+        text[left - 1] not in separators
+        and not _is_paragraph_break(text, left - 1)
+    ):
         left -= 1
 
     right = position
-    while right < len(text) and text[right] not in separators:
+    while right < len(text) and (
+        text[right] not in separators
+        and not _is_paragraph_break(text, right)
+    ):
         right += 1
 
     return left, min(len(text), right + 1)
@@ -276,14 +302,10 @@ def _classify_context(
     ):
         return "deadline"
 
-    if (
-        "day before" in c
-        or "day-before" in c
-        or "prior to" in c
-    ) and not ("public hearing on" in s or "will hold a public hearing" in s):
-        return "deadline"
-
-    # Exact sentence evidence first.
+    # Exact sentence evidence takes priority over an ambiguous
+    # "day before"/"prior to" signal elsewhere in the surrounding
+    # context window. Otherwise a nearby, unrelated deadline sentence
+    # can downgrade a genuine, explicitly-labeled hearing/meeting date.
     if "public hearing" in s:
         return "public_hearing"
 
@@ -310,6 +332,13 @@ def _classify_context(
 
     if "decision" in s:
         return "decision_event"
+
+    if (
+        "day before" in c
+        or "day-before" in c
+        or "prior to" in c
+    ):
+        return "deadline"
 
     # Local context second.
     if "public hearing" in c:
@@ -693,6 +722,67 @@ def get_next_project_date(
 # APPLICATION ENRICHMENT
 # ---------------------------------------------------------------------------
 
+def _application_text_window(
+    application: dict,
+    text: str,
+) -> str:
+    """
+    Restrict date extraction to this application's own agenda Item N
+    block when the packet contains multiple applications.
+
+    A staff-report packet describes several applications in one PDF.
+    Without this, every application's next_project_date/evidence is
+    resolved from the ENTIRE packet text, so an application with no
+    date content of its own silently inherits another application's
+    date and evidence. Falls back to the full document when no item
+    number is available or no matching boundary is found (e.g.
+    single-application documents), preserving prior behavior.
+
+    The shared agenda preamble (hearing/meeting notice text that
+    precedes "Item 1") legitimately applies to every item on that
+    agenda and is always included. A single item's own content can
+    also recur under repeated "Item N" headings (a short agenda-list
+    entry followed by a full, multi-page staff report) -- every
+    chunk carrying that item's own number is included so its own
+    dates are not lost, while other items' chunks are excluded.
+    """
+
+    item = application.get("item")
+
+    if item is None:
+        return text
+
+    try:
+        item_number = int(item)
+    except (TypeError, ValueError):
+        return text
+
+    try:
+        from backend.app.analyzers.friction_analyzer import (
+            find_item_boundaries,
+        )
+    except ImportError:
+        return text
+
+    boundaries = find_item_boundaries(text)
+
+    if not boundaries:
+        return text
+
+    own_chunks = [
+        boundary["text"]
+        for boundary in boundaries
+        if boundary["item"] == item_number
+    ]
+
+    if not own_chunks:
+        return text
+
+    preamble = text[: boundaries[0]["start"]]
+
+    return preamble + "\n".join(own_chunks)
+
+
 def enrich_application_dates(
     application: dict,
     text: str,
@@ -708,8 +798,13 @@ def enrich_application_dates(
         "application_number"
     )
 
-    dates = extract_project_dates(
+    scoped_text = _application_text_window(
+        application,
         text,
+    )
+
+    dates = extract_project_dates(
+        scoped_text,
         reference_date,
         application_number,
     )
@@ -725,7 +820,7 @@ def enrich_application_dates(
     ]
 
     next_event = get_next_project_date(
-        text,
+        scoped_text,
         reference_date,
         application_number,
     )

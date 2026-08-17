@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname, useSearchParams } from "next/navigation";
+import { usePathname } from "next/navigation";
 
 const NAV_ITEMS = [
   {
@@ -23,12 +23,12 @@ const NAV_ITEMS = [
     ),
   },
   {
-    href: "/properties?readiness=READY_FOR_OUTREACH",
+    href: "/ready-for-outreach",
     label: "Ready for Outreach",
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M5 13l4 4L19 7" />,
   },
   {
-    href: "/properties?event=yes",
+    href: "/upcoming",
     label: "Upcoming Events",
     icon: (
       <path
@@ -39,28 +39,19 @@ const NAV_ITEMS = [
     ),
   },
   {
-    href: "/properties?friction=yes",
-    label: "Friction",
-    icon: <path strokeLinecap="round" strokeLinejoin="round" d="M12 3 4 13h6l-1 8 9-11h-6l1-7Z" />,
-  },
-  {
-    href: "/properties?contactability=needs_discovery",
-    label: "Needs Contact Discovery",
+    href: "/contact-discovery",
+    label: "Contact Discovery",
     icon: <path strokeLinecap="round" strokeLinejoin="round" d="M4 5h16v11H8l-4 4V5Z" />,
   },
 ];
 
-function isActive(href: string, pathname: string, searchParams: URLSearchParams): boolean {
-  const [path, query] = href.split("?");
-  if (pathname !== path) return false;
-  if (!query) return true;
-  const params = new URLSearchParams(query);
-  return Array.from(params.entries()).every(([key, value]) => searchParams.get(key) === value);
+function isActive(href: string, pathname: string): boolean {
+  if (href === "/") return pathname === "/";
+  return pathname.startsWith(href);
 }
 
 export function Sidebar() {
   const pathname = usePathname();
-  const searchParams = useSearchParams();
 
   return (
     <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border-subtle bg-background-elevated px-4 py-6 lg:flex">
@@ -76,7 +67,7 @@ export function Sidebar() {
 
       <nav className="flex flex-col gap-1">
         {NAV_ITEMS.map((item) => {
-          const active = isActive(item.href, pathname, searchParams);
+          const active = isActive(item.href, pathname);
           return (
             <Link
               key={item.href}
@@ -112,7 +103,7 @@ export function Sidebar() {
             <p className="text-xs font-medium text-foreground">Live data</p>
           </div>
           <p className="mt-1 text-[11px] leading-snug text-foreground-faint">
-            Live via PermitSignal API · Provo Planning Commission, Tulsa TMAPC
+            Live via PermitSignal API
           </p>
         </div>
       </div>
