@@ -44,6 +44,8 @@ APPROVAL_INTELLIGENCE_MODULE = "backend.app.services.approval_action_intelligenc
 ECONOMIC_INTELLIGENCE_MODULE = "backend.app.services.economic_intelligence"
 COMMERCIAL_INTELLIGENCE_MODULE = "backend.app.services.commercial_lead_intelligence"
 OUTREACH_INTELLIGENCE_MODULE = "backend.app.services.outreach_intelligence"
+APPROVAL_INTELLIGENCE_ENGINE_MODULE = "backend.app.services.approval_intelligence_engine"
+PRICING_ENGINE_MODULE = "backend.app.services.pricing_engine"
 LEAD_REPOSITORY_MODULE = "backend.app.services.lead_repository"
 
 
@@ -953,6 +955,125 @@ def _apply_outreach_intelligence(
 
 
 # ============================================================================
+# APPROVAL INTELLIGENCE ENGINE (Deep Intelligence)
+# ============================================================================
+
+def _apply_approval_intelligence_engine(
+    opportunities: list[dict[str, Any]],
+    reference_date: date,
+) -> list[dict[str, Any]]:
+    """
+    Attach the comprehensive approval intelligence report to each
+    opportunity. This is the PRIMARY APPROVAL INTELLIGENCE BRAIN --
+    it produces the full intelligence package (evidence registry,
+    denial history, blockers, requirements, actions, decision path,
+    stakeholders, service recommendation, client message, internal
+    strategy, pricing inputs) for each project.
+
+    Purely additive: every existing field is preserved unchanged;
+    only the approval_intelligence_* keys are added/overwritten.
+    """
+    module = _import_service(APPROVAL_INTELLIGENCE_ENGINE_MODULE)
+
+    engine_fn = _first_callable(
+        module,
+        "build_approval_intelligence",
+    )
+
+    if engine_fn is None:
+        return opportunities
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+
+        try:
+            intelligence = engine_fn(item, reference_date=reference_date)
+
+            if isinstance(intelligence, dict):
+                # Flatten the intelligence report into the opportunity record
+                # so it's accessible from the same flat dict the rest of the
+                # pipeline uses.
+                item["approval_intelligence"] = intelligence
+
+                # Also surface key fields at the top level for backward compat
+                if intelligence.get("approval_status"):
+                    item["deep_approval_status"] = intelligence["approval_status"]
+                if intelligence.get("approval_risk"):
+                    item["deep_approval_risk"] = intelligence["approval_risk"]
+                if intelligence.get("approval_readiness"):
+                    item["deep_approval_readiness"] = intelligence["approval_readiness"]
+
+        except Exception as exc:
+            item["approval_intelligence"] = {
+                "status": "error",
+                "error": str(exc),
+            }
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
+# PRICING ENGINE
+# ============================================================================
+
+def _apply_pricing(
+    opportunities: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """
+    Apply deterministic pricing to each opportunity that has
+    pricing_inputs from the approval intelligence engine. Never
+    invents prices -- only computes them from complexity signals.
+    """
+    module = _import_service(PRICING_ENGINE_MODULE)
+
+    pricing_fn = _first_callable(
+        module,
+        "calculate_pricing",
+    )
+
+    if pricing_fn is None:
+        return opportunities
+
+    def _map_pricing_inputs(raw: dict) -> dict:
+        """Map approval_intelligence pricing_inputs to pricing_engine format."""
+        return {
+            "service_level": raw.get("service_tier") or raw.get("service_level", "MONITORING"),
+            "friction_score": raw.get("friction_score", 0),
+            "has_denial": raw.get("has_denial_history", False) or raw.get("has_denial", False),
+            "has_hearing": raw.get("has_future_event", False),
+            "stakeholder_complexity": raw.get("complexity_tier", "medium"),
+            "documentation_complexity": raw.get("complexity_tier", "medium"),
+        }
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+
+        raw_inputs = item.get("pricing_inputs") or (
+            item.get("approval_intelligence", {}).get("pricing_inputs")
+        )
+
+        if raw_inputs and isinstance(raw_inputs, dict):
+            try:
+                mapped = _map_pricing_inputs(raw_inputs)
+                pricing = pricing_fn(mapped)
+
+                if isinstance(pricing, dict):
+                    item["pricing"] = pricing
+            except Exception:
+                item["pricing"] = {"status": "error"}
+
+        results.append(item)
+
+    return results
+
+
+# ============================================================================
 # LEAD QUALIFICATION
 # ============================================================================
 
@@ -1191,7 +1312,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[1/7] Reading government packet...")
+        print("[1/10] Reading government packet...")
 
     text = _read_pdf_text(pdf_path)
 
@@ -1206,7 +1327,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[2/7] Extracting applications...")
+        print("[2/10] Extracting applications...")
 
     application_module = _import_service(
         APPLICATION_EXTRACTOR_MODULE
@@ -1250,7 +1371,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[3/7] Analyzing historical friction...")
+        print("[3/10] Analyzing historical friction...")
 
     friction_enriched = _analyze_friction(
         text,
@@ -1276,7 +1397,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[4/7] Extracting future project dates...")
+        print("[4/10] Extracting future project dates...")
 
     date_enriched = _adapt_dates(
         friction_enriched,
@@ -1301,7 +1422,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[5/7] Building canonical opportunities...")
+        print("[5/10] Building canonical opportunities...")
 
     opportunities = _build_opportunities(
         date_enriched,
@@ -1344,7 +1465,7 @@ def run_pipeline(
 
     if verbose:
         print()
-        print("[6/7] Applying applicant identity and enrichment...")
+        print("[6/10] Applying applicant identity and enrichment...")
 
     completed_opportunities = _enrich_applicants(
         completed_opportunities,
@@ -1378,12 +1499,37 @@ def run_pipeline(
     )
 
     # ------------------------------------------------------------------------
-    # 7. Queue / validation
+    # 8. Deep approval intelligence
     # ------------------------------------------------------------------------
 
     if verbose:
         print()
-        print("[7/7] Validating and sorting production queue...")
+        print("[8/10] Running deep approval intelligence engine...")
+
+    completed_opportunities = _apply_approval_intelligence_engine(
+        completed_opportunities,
+        reference_date,
+    )
+
+    # ------------------------------------------------------------------------
+    # 9. Pricing
+    # ------------------------------------------------------------------------
+
+    if verbose:
+        print()
+        print("[9/10] Computing deterministic pricing...")
+
+    completed_opportunities = _apply_pricing(
+        completed_opportunities,
+    )
+
+    # ------------------------------------------------------------------------
+    # 10. Queue / validation
+    # ------------------------------------------------------------------------
+
+    if verbose:
+        print()
+        print("[10/10] Validating and sorting production queue...")
 
     _validate_batch(
         completed_opportunities
@@ -1400,7 +1546,7 @@ def run_pipeline(
 
     metadata = {
         "pipeline": "PermitSignal",
-        "pipeline_version": "1.0",
+        "pipeline_version": "2.0",
         "source_pdf": str(pdf_path),
         "reference_date": reference_date.isoformat(),
         "live_enrichment": bool(live_enrichment),
@@ -1408,6 +1554,16 @@ def run_pipeline(
         "applications_detected": len(applications),
         "opportunities_built": len(completed_opportunities),
         "future_opportunities": future_count,
+        "intelligence_reports": sum(
+            1
+            for item in completed_opportunities
+            if item.get("approval_intelligence")
+        ),
+        "pricing_computed": sum(
+            1
+            for item in completed_opportunities
+            if item.get("pricing")
+        ),
         "generated_at": datetime.now().isoformat(
             timespec="seconds"
         ),

@@ -459,6 +459,47 @@ def main():
                 results.append({**opportunity, **approval})
             return results
 
+    class FakeIntelligenceEngineModule:
+        @staticmethod
+        def build_approval_intelligence(lead, reference_date=None):
+            return {
+                "version": "1.0",
+                "status": "computed",
+                "executive_diagnosis": "Test diagnosis",
+                "approval_status": "PENDING",
+                "approval_risk": "MEDIUM",
+                "approval_readiness": "PARTIAL",
+                "approval_blockers": [],
+                "requirements": [],
+                "recommended_actions": [],
+                "stakeholders": [],
+                "decision_path": [],
+                "evidence": [],
+                "pricing_inputs": {
+                    "service_tier": "MONITORING",
+                    "friction_score": lead.get("friction_score", 0),
+                    "has_denial_history": False,
+                    "has_future_event": bool(lead.get("has_future_opportunity")),
+                    "complexity_tier": "medium",
+                },
+                "client_message": {"subject": "Test", "body": "Test"},
+                "internal_strategy": {"assessment": "Test"},
+                "model_warnings": [],
+                "unresolved_questions": [],
+            }
+
+    class FakePricingEngineModule:
+        @staticmethod
+        def calculate_pricing(pricing_inputs):
+            return {
+                "fee_low": 150.0,
+                "fee_high": 300.0,
+                "recommended_fee": 225.0,
+                "deposit_percent": 50,
+                "deposit_amount": 112.5,
+                "pricing_rationale": ["Test pricing"],
+            }
+
     def _fake_import_full(name):
         mapping = {
             po.APPLICATION_EXTRACTOR_MODULE: FakeApplicationModule,
@@ -468,6 +509,8 @@ def main():
             po.APPLICANT_IDENTITY_MODULE: FakeIdentityModuleFull,
             po.APPLICANT_ENRICHMENT_MODULE: FakeEnrichmentModuleFull,
             po.APPROVAL_INTELLIGENCE_MODULE: FakeApprovalModuleFull,
+            po.APPROVAL_INTELLIGENCE_ENGINE_MODULE: FakeIntelligenceEngineModule,
+            po.PRICING_ENGINE_MODULE: FakePricingEngineModule,
             # Phase 6 commercial lead intelligence, Phase 8 outreach
             # intelligence, and Phase 9 economic intelligence are all
             # deterministic and have no PDF/network dependency, so the full

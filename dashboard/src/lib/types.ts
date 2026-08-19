@@ -256,7 +256,126 @@ export interface Lead {
   // last_enriched_at, next_enrichment_at, source_status,
   // owner_discovery_status, follow_up_status
 
+  // Phase 2B -- Owner / Person / Entity Investigation Profile.
+  // User-triggered investigation of the owner, applicant, company/entity,
+  // and project using publicly available business/professional information.
+  investigation?: InvestigationProfile;
+
   [key: string]: unknown;
+
+  // Deep Approval Intelligence (from approval_intelligence_engine)
+  // Every sub-object matches the exact shape returned by
+  // backend/app/services/approval_intelligence_engine.py
+  approval_intelligence?: {
+    version?: string;
+    status?: string;
+    executive_diagnosis?: string | null;
+    approval_status?: string;
+    approval_risk?: string;
+    approval_readiness?: string;
+    // Flat list — NOT nested under denial_events
+    denial_history?: {
+      event_type?: string;
+      event_date?: string | null;
+      objection_type?: string;
+      is_procedural?: boolean;
+      is_recurrence?: boolean;
+      confidence?: number;
+      evidence_ids?: string[];
+    }[];
+    approval_blockers?: {
+      blocker_type?: string;
+      severity?: string;
+      statement?: string;
+      classification?: string;
+      confidence?: string;
+      evidence_ids?: string[];
+      rationale?: string;
+    }[];
+    requirements?: {
+      requirement_id?: string;
+      group?: string;
+      group_label?: string;
+      statement?: string;
+      classification?: string;
+      confidence?: string;
+      evidence_ids?: string[];
+      rationale?: string;
+    }[];
+    recommended_actions?: {
+      action_id?: string;
+      priority_rank?: number;
+      action?: string;
+      classification?: string;
+      confidence?: string;
+      evidence_ids?: string[];
+      deadline?: string | null;
+      rationale?: string;
+    }[];
+    stakeholder_actions?: {
+      stakeholder_type?: string;
+      name?: string;
+      role?: string;
+      email?: string | null;
+      suggested_action?: string;
+    }[];
+    decision_path?: {
+      stage?: string;
+      stage_label?: string;
+      status?: string;
+      evidence?: string;
+      evidence_ids?: string[];
+      classification?: string;
+    }[];
+    service_recommendation?: string;
+    service_scope?: string;
+    pricing_inputs?: Record<string, unknown>;
+    // Plain string, not {subject, body}
+    client_message?: string;
+    // Plain string, not {assessment, next_step, risk_factors}
+    internal_strategy?: string;
+    evidence?: {
+      evidence_id?: string;
+      claim?: string;
+      source_type?: string;
+      source_url?: string | null;
+      document_name?: string | null;
+      page?: number | null;
+      date?: string | null;
+      excerpt?: string | null;
+      confidence?: number;
+    }[];
+    unresolved_questions?: string[];
+    model_warnings?: string[];
+  };
+
+  // Pricing (from pricing_engine.calculate_pricing)
+  pricing?: {
+    fee_low?: number;
+    fee_high?: number;
+    recommended_fee?: number;
+    deposit_percent?: number;
+    deposit_amount?: number;
+    // Array of rationale lines, NOT a single string
+    pricing_rationale?: string[];
+    status?: string;
+  };
+
+  deep_approval_status?: string;
+  deep_approval_risk?: string;
+  deep_approval_readiness?: string;
+
+  // Predictions (future stage — not yet produced by backend pipeline)
+  predictions?: {
+    outcome_prediction?: string;
+    likely_outcome?: string;
+    confidence_level?: string;
+    approval_probability?: number;
+    outcome_confidence?: number;
+    contributing_factors?: string[];
+    risk_factors?: string[];
+    reasoning?: string;
+  };
 }
 
 export interface DashboardStats {
@@ -280,6 +399,137 @@ export type CommercialReadiness =
   | "NEEDS_CONTACT_ENRICHMENT"
   | "NEEDS_MORE_PROJECT_EVIDENCE"
   | "NOT_READY";
+
+export type InvestigationStatus =
+  | "NOT_STARTED"
+  | "IN_PROGRESS"
+  | "ENRICHED"
+  | "PARTIAL"
+  | "NOT_FOUND"
+  | "ERROR";
+
+export type InvestigationSource =
+  | "web"
+  | "website"
+  | "directories"
+  | "linkedin"
+  | "public_records"
+  | "project"
+  | "contact";
+
+export interface InvestigationEvidence {
+  field: string;
+  value: string;
+  source_url?: string;
+  source_type?: string;
+  source_title?: string;
+  source_domain?: string;
+  discovered_at?: string;
+  confidence?: string;
+  confidence_score?: number;
+  evidence_text?: string;
+  match_reason?: string;
+  entity_type?: string;
+  entity_identifier?: string;
+}
+
+export interface InvestigationEvent {
+  action: string;
+  occurred_at?: string;
+  source?: string;
+  queries_executed?: number;
+  pages_fetched?: number;
+  emails_discovered?: number;
+  phones_discovered?: number;
+  websites_discovered?: number;
+  profiles_discovered?: number;
+  entities_discovered?: number;
+  evidence_created?: number;
+  result?: string;
+  error?: string;
+  note?: string;
+}
+
+export interface IdentityMatch {
+  match_score: number;
+  confidence_label: string;
+  matched_signals: string[];
+  conflicting_signals: string[];
+  reasoning: string;
+  discovered_name?: string;
+  discovered_company?: string;
+  discovered_role?: string;
+  source_url?: string;
+}
+
+export interface InvestigationContactCandidate {
+  value: string;
+  source_url?: string;
+  source_type?: string;
+  source_domain?: string;
+  confidence?: number;
+  evidence_text?: string;
+  is_generic?: boolean;
+}
+
+export interface InvestigationProfile {
+  status: InvestigationStatus;
+  started_at: string | null;
+  completed_at: string | null;
+  last_at: string | null;
+  sources: Record<InvestigationSource, InvestigationStatus>;
+  evidence: InvestigationEvidence[];
+  events: InvestigationEvent[];
+  contacts: {
+    preferred_email: string | null;
+    preferred_phone: string | null;
+    preferred_website: string | null;
+    email_candidates: InvestigationContactCandidate[];
+    phone_candidates: InvestigationContactCandidate[];
+    website_candidates: InvestigationContactCandidate[];
+  };
+  identity_matches: IdentityMatch[];
+  summary: {
+    emails_found: number;
+    phones_found: number;
+    websites_found: number;
+    profiles_found: number;
+    entities_found: number;
+  };
+  errors: string[];
+}
+
+export interface InvestigationResponse {
+  status: string;
+  application_number: string;
+  investigation: InvestigationProfile;
+}
+
+export interface InvestigationActionResponse {
+  status: string;
+  application_number: string;
+  investigation_status: InvestigationStatus;
+  source_status: Record<string, InvestigationStatus>;
+  evidence_count: number;
+  events: InvestigationEvent[];
+}
+
+export interface InvestigationAllResponse {
+  status: string;
+  application_number: string;
+  investigation_status: InvestigationStatus;
+  source_status: Record<string, InvestigationStatus>;
+  evidence_count: number;
+  emails_found: number;
+  phones_found: number;
+  websites_found: number;
+  profiles_found: number;
+  identity_matches: number;
+  preferred_email: string | null;
+  preferred_phone: string | null;
+  preferred_website: string | null;
+  events: InvestigationEvent[];
+}
 
 export interface LeadFilters {
   priority?: Priority;

@@ -1,7 +1,9 @@
+import os
 from datetime import date, datetime, timezone
 from typing import Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, Response, UploadFile
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from backend.app.collectors.provo import (
@@ -9,12 +11,38 @@ from backend.app.collectors.provo import (
 )
 from backend.app.services import case_report_generator, discovery_orchestrator, document_downloader
 from backend.app.services import lead_repository, opportunity_builder, outreach_intelligence, pipeline_orchestrator
+from backend.app.services import investigation_engine
 
 
 app = FastAPI(
     title="PermitSignal API",
     description="Government approval intelligence platform",
     version="1.0.0",
+)
+
+# ---------------------------------------------------------------------------
+# CORS — allow the frontend origin(s) to call this API.
+#
+# PERMITSIGNAL_CORS_ORIGINS is a comma-separated list read from the
+# environment.  For local development the Vercel dev server (localhost:3000)
+# is included by default.  In production set the variable to the actual
+# deployed frontend origin (e.g. https://permitsignal.vercel.app).
+# ---------------------------------------------------------------------------
+_cors_raw = os.environ.get("PERMITSIGNAL_CORS_ORIGINS", "")
+_allowed_origins = [o.strip() for o in _cors_raw.split(",") if o.strip()]
+if not _allowed_origins:
+    # Sensible defaults when the env var is unset (local development).
+    _allowed_origins = [
+        "http://localhost:3000",
+        "http://localhost:3001",
+    ]
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_allowed_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 
@@ -350,6 +378,54 @@ class OutreachEventRequest(BaseModel):
     note: Optional[str] = None
 
 
+@app.get("/leads/{application_number}/intelligence")
+def get_intelligence_package(application_number: str):
+    """
+    Returns the full approval intelligence package for one lead:
+    evidence registry, denial history, approval blockers, requirements
+    (A/B/C classified), recommended actions, decision path, stakeholders,
+    service recommendation, pricing, client message, and internal strategy.
+    """
+    try:
+        from backend.app.services.approval_intelligence_engine import build_approval_intelligence
+        from backend.app.services.pricing_engine import calculate_pricing
+        from datetime import date as date_cls
+
+        lead = _fetch_lead_any_source(application_number)
+
+        if lead is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No lead on record for application_number={application_number!r}",
+            )
+
+        intelligence = build_approval_intelligence(lead, reference_date=date_cls.today())
+
+        pricing = None
+        pricing_inputs = intelligence.get("pricing_inputs")
+        if pricing_inputs and isinstance(pricing_inputs, dict):
+            try:
+                pricing = calculate_pricing(pricing_inputs)
+            except Exception:
+                pricing = {"status": "error"}
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "intelligence": intelligence,
+            "pricing": pricing,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
 @app.post("/leads/{application_number}/outreach/events")
 def record_outreach_event(application_number: str, request: OutreachEventRequest):
     """
@@ -413,6 +489,289 @@ def record_outreach_event(application_number: str, request: OutreachEventRequest
             status_code=500,
             detail=str(exc),
         )
+
+
+class InvestigationRequest(BaseModel):
+    note: Optional[str] = None
+    force: bool = False
+
+
+def _get_investigation_lead_or_404(application_number: str) -> dict:
+    lead = _fetch_lead_any_source(application_number)
+    if lead is None:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No lead on record for application_number={application_number!r}",
+        )
+    return lead
+
+
+def _persist_investigation_lead(lead: dict) -> None:
+    if lead_repository.is_configured():
+        try:
+            lead_repository.upsert_leads([lead])
+        except Exception as exc:
+            import logging
+            logging.warning(
+                "Investigation persistence failed for %s: %s",
+                lead.get("application_number", "?"),
+                exc,
+            )
+
+
+@app.get("/leads/{application_number}/investigation")
+def get_investigation(application_number: str):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.get_investigation(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation": inv,
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/leads/{application_number}/investigation/status")
+def get_investigation_status(application_number: str):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.get_investigation(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status", "NOT_STARTED"),
+            "source_status": inv.get("sources", {}),
+            "summary": inv.get("summary", {}),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/leads/{application_number}/investigation/evidence")
+def get_investigation_evidence(application_number: str):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.get_investigation(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "evidence": inv.get("evidence", []),
+            "contacts": inv.get("contacts", {}),
+            "identity_matches": inv.get("identity_matches", []),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/leads/{application_number}/investigation/events")
+def get_investigation_events(application_number: str):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.get_investigation(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "events": inv.get("events", []),
+            "errors": inv.get("errors", []),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/web")
+def investigate_web(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "web", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/website")
+def investigate_website(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "website", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/directories")
+def investigate_directories(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "directories", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/linkedin")
+def investigate_linkedin(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "linkedin", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/public-records")
+def investigate_public_records(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "public_records", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/project")
+def investigate_project(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "project", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/contact")
+def investigate_contact(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_single_source(
+            lead, "contact", force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "events": inv.get("events", [])[-1:],
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.post("/leads/{application_number}/investigation/all")
+def investigate_all(application_number: str, request: InvestigationRequest):
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        inv = investigation_engine.run_all(
+            lead, force=request.force, note=request.note,
+        )
+        _persist_investigation_lead(lead)
+        contacts = inv.get("contacts", {})
+        summary = inv.get("summary", {})
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "investigation_status": inv.get("status"),
+            "source_status": inv.get("sources", {}),
+            "evidence_count": len(inv.get("evidence", [])),
+            "emails_found": summary.get("emails_found", 0),
+            "phones_found": summary.get("phones_found", 0),
+            "websites_found": summary.get("websites_found", 0),
+            "profiles_found": summary.get("profiles_found", 0),
+            "identity_matches": len(inv.get("identity_matches", [])),
+            "preferred_email": contacts.get("preferred_email"),
+            "preferred_phone": contacts.get("preferred_phone"),
+            "preferred_website": contacts.get("preferred_website"),
+            "events": inv.get("events", []),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 def _parse_reference_date(value: Optional[str]) -> Optional[date]:

@@ -715,6 +715,189 @@ def load_lead_queue(output_path: "Path | str" = DEFAULT_OUTPUT) -> list[dict]:
     return data.get("lead_queue", [])
 
 
+# ============================================================================
+# DEEP INTELLIGENCE SECTIONS (from approval_intelligence_engine)
+# ============================================================================
+
+
+def _build_executive_diagnosis(lead: dict) -> list:
+    """Section: Executive Diagnosis from deep intelligence."""
+    intel = lead.get("approval_intelligence") or {}
+    diagnosis = intel.get("executive_diagnosis")
+    if not diagnosis:
+        return []
+    return [
+        Paragraph("EXECUTIVE DIAGNOSIS", STYLE_SECTION),
+        Paragraph(_xml_escape(diagnosis), STYLE_BODY),
+        Spacer(1, 6),
+    ]
+
+
+def _build_denial_history(lead: dict) -> list:
+    """Section: Denial History."""
+    intel = lead.get("approval_intelligence") or {}
+    history = intel.get("denial_history") or []
+    if not history:
+        return []
+    story: list = [Paragraph("DENIAL HISTORY", STYLE_SECTION)]
+    for h in history:
+        event_type = (h.get("event_type") or "unknown").replace("_", " ").title()
+        event_date = h.get("event_date") or "N/A"
+        objection = h.get("objection_type") or "unknown"
+        recurrence = " [RECURRENCE]" if h.get("is_recurrence") else ""
+        story.append(
+            Paragraph(
+                f"<b>{event_type}</b> ({event_date}) -- Objection: {objection}{recurrence}",
+                STYLE_SMALL,
+            )
+        )
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _build_approval_blockers(lead: dict) -> list:
+    """Section: Approval Blockers."""
+    intel = lead.get("approval_intelligence") or {}
+    blockers = intel.get("approval_blockers") or []
+    if not blockers:
+        return []
+    story: list = [Paragraph("APPROVAL BLOCKERS", STYLE_SECTION)]
+    for b in blockers:
+        severity = (b.get("severity") or "UNKNOWN").upper()
+        btype = (b.get("blocker_type") or "unknown").replace("_", " ").title()
+        statement = b.get("statement") or ""
+        classification = b.get("classification") or ""
+        tag = f"[{severity}] {btype}"
+        if classification:
+            tag += f" -- {classification}"
+        story.append(Paragraph(f"<b>{_xml_escape(tag)}</b>", STYLE_TAG))
+        if statement:
+            story.append(Paragraph(_xml_escape(statement), STYLE_SMALL))
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _build_requirements_intelligence(lead: dict) -> list:
+    """Section: Requirements (Groups A / B / C)."""
+    intel = lead.get("approval_intelligence") or {}
+    requirements = intel.get("requirements") or []
+    if not requirements:
+        return []
+    story: list = [Paragraph("REQUIREMENTS", STYLE_SECTION)]
+    group_labels = {
+        "A": "EXPLICIT GOVERNMENT REQUIREMENTS",
+        "B": "DERIVED / INFERRED",
+        "C": "PERMITSIGNAL RECOMMENDATIONS",
+    }
+    for group_key in ("A", "B", "C"):
+        items = [r for r in requirements if r.get("group") == group_key]
+        if not items:
+            continue
+        story.append(Paragraph(f"<b>{group_labels.get(group_key, group_key)}</b>", STYLE_SUBSECTION))
+        for r in items:
+            statement = r.get("statement") or ""
+            classification = r.get("classification") or ""
+            story.append(Paragraph(
+                f"<b>[{classification}]</b> {_xml_escape(statement)}",
+                STYLE_SMALL,
+            ))
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _build_actions_intelligence(lead: dict) -> list:
+    """Section: Recommended Actions."""
+    intel = lead.get("approval_intelligence") or {}
+    actions = intel.get("recommended_actions") or []
+    if not actions:
+        return []
+    sorted_actions = sorted(actions, key=lambda a: a.get("priority_rank", 99))
+    story: list = [Paragraph("RECOMMENDED ACTIONS", STYLE_SECTION)]
+    for a in sorted_actions:
+        rank = a.get("priority_rank", "?")
+        action_text = a.get("action") or ""
+        deadline = a.get("deadline") or ""
+        line = f"<b>#{rank}</b> {_xml_escape(action_text)}"
+        if deadline:
+            line += f" (Deadline: {deadline})"
+        story.append(Paragraph(line, STYLE_SMALL))
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _build_decision_path_intelligence(lead: dict) -> list:
+    """Section: Decision Path."""
+    intel = lead.get("approval_intelligence") or {}
+    path = intel.get("decision_path") or []
+    if not path:
+        return []
+    story: list = [Paragraph("DECISION PATH", STYLE_SECTION)]
+    for stage in path:
+        label = stage.get("stage_label") or stage.get("stage") or "Unknown"
+        status = (stage.get("status") or "unknown").replace("_", " ").title()
+        classification = stage.get("classification") or ""
+        line = f"<b>{_xml_escape(label)}</b>: {status}"
+        if classification:
+            line += f" [{classification}]"
+        story.append(Paragraph(line, STYLE_SMALL))
+    story.append(Spacer(1, 6))
+    return story
+
+
+def _build_client_message_intelligence(lead: dict) -> list:
+    """Section: Client Message (from intelligence engine)."""
+    intel = lead.get("approval_intelligence") or {}
+    message = intel.get("client_message")
+    if not message:
+        return []
+    return [
+        Paragraph("CLIENT MESSAGE", STYLE_SECTION),
+        Paragraph(_xml_escape(message), STYLE_SMALL),
+        Spacer(1, 6),
+    ]
+
+
+def _build_pricing_intelligence(lead: dict) -> list:
+    """Section: Pricing (from pricing engine)."""
+    pricing = lead.get("pricing") or {}
+    if not pricing or pricing.get("status") == "error":
+        return []
+    story: list = [Paragraph("PRICING", STYLE_SECTION)]
+    fee_low = pricing.get("fee_low")
+    fee_high = pricing.get("fee_high")
+    recommended = pricing.get("recommended_fee")
+    deposit_pct = pricing.get("deposit_percent")
+    deposit_amt = pricing.get("deposit_amount")
+    if fee_low is not None and fee_high is not None:
+        story.append(Paragraph(
+            f"<b>Fee range:</b> ${fee_low:,.0f} -- ${fee_high:,.0f}",
+            STYLE_SMALL,
+        ))
+    if recommended is not None:
+        story.append(Paragraph(
+            f"<b>Recommended fee:</b> ${recommended:,.0f}",
+            STYLE_SMALL,
+        ))
+    if deposit_pct is not None and deposit_amt is not None:
+        story.append(Paragraph(
+            f"<b>Deposit:</b> {deposit_pct}% (${deposit_amt:,.0f})",
+            STYLE_SMALL,
+        ))
+    rationale = pricing.get("pricing_rationale") or []
+    if rationale:
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("<b>Pricing Rationale:</b>", STYLE_LABEL))
+        for line in rationale:
+            story.append(Paragraph(f"  {_xml_escape(line)}", STYLE_SMALL))
+    story.append(Spacer(1, 6))
+    return story
+
+
+# ============================================================================
+# MAIN PDF GENERATION
+# ============================================================================
+
+
 def generate_case_report_pdf(lead: dict) -> bytes:
     """Renders a canonical lead dict into a formal PermitSignal case-report PDF, returned as bytes."""
     buffer = BytesIO()
@@ -737,6 +920,16 @@ def generate_case_report_pdf(lead: dict) -> bytes:
     story.extend(_build_friction(lead))
     story.extend(_build_contact_intelligence(lead))
     story.extend(_build_follow_up(lead))
+    # Deep intelligence sections (from approval_intelligence_engine)
+    story.extend(_build_executive_diagnosis(lead))
+    story.extend(_build_denial_history(lead))
+    story.extend(_build_approval_blockers(lead))
+    story.extend(_build_requirements_intelligence(lead))
+    story.extend(_build_actions_intelligence(lead))
+    story.extend(_build_decision_path_intelligence(lead))
+    story.extend(_build_pricing_intelligence(lead))
+    story.extend(_build_client_message_intelligence(lead))
+    # Existing evidence and verification
     story.extend(_build_evidence_register(lead))
     story.extend(_build_verification_checklist(lead))
 
