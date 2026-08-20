@@ -24,6 +24,7 @@ product -- it never claims government/municipal authorship.
 Public API
 ----------
 load_lead_by_application_number(application_number, output_path=DEFAULT_OUTPUT)
+load_lead_queue(output_path=DEFAULT_OUTPUT)
 generate_case_report_pdf(lead) -> bytes
 """
 
@@ -60,6 +61,7 @@ from backend.app.services.pipeline_orchestrator import DEFAULT_OUTPUT
 
 PAGE_SIZE = LETTER
 MARGIN = 0.65 * inch
+CONTENT_WIDTH = PAGE_SIZE[0] - 2 * MARGIN
 
 INK = colors.HexColor("#20232a")
 MUTED = colors.HexColor("#63666b")
@@ -67,46 +69,64 @@ FAINT = colors.HexColor("#8a8d92")
 BRASS = colors.HexColor("#a97a2f")
 HAIRLINE = colors.HexColor("#d8d3c8")
 
+HEADER_BG = colors.HexColor("#2f3a42")
+LABEL_BG = colors.HexColor("#edf0f2")
+ROW_ALT_BG = colors.HexColor("#f7f8f9")
+WHITE = colors.white
+
 NOT_FOUND = "NOT FOUND"
 OWNERSHIP_NOT_ESTABLISHED = "OWNERSHIP NOT ESTABLISHED"
 UNVERIFIED = "UNVERIFIED"
 
 _STYLES = getSampleStyleSheet()
 
+# -- Typography --
+
 STYLE_TITLE = ParagraphStyle(
     "CaseTitle", parent=_STYLES["Title"], fontName="Helvetica-Bold",
-    fontSize=16, leading=18, textColor=INK, spaceAfter=2, alignment=0,
+    fontSize=18, leading=20, textColor=INK, spaceAfter=1, alignment=0,
 )
 STYLE_TITLE2 = ParagraphStyle(
-    "CaseTitle2", parent=STYLE_TITLE, fontSize=12.5, textColor=MUTED,
+    "CaseTitle2", parent=STYLE_TITLE, fontSize=11, leading=13,
+    textColor=BRASS, fontName="Helvetica",
 )
 STYLE_SUBTITLE = ParagraphStyle(
-    "CaseSubtitle", parent=_STYLES["Normal"], fontName="Helvetica-Bold",
-    fontSize=8.5, textColor=BRASS, spaceAfter=10, alignment=0,
+    "CaseSubtitle", parent=_STYLES["Normal"], fontName="Helvetica",
+    fontSize=7.5, textColor=MUTED, spaceAfter=6, alignment=0,
 )
 STYLE_SECTION = ParagraphStyle(
     "SectionHeading", parent=_STYLES["Heading2"], fontName="Helvetica-Bold",
-    fontSize=11.5, textColor=INK, spaceBefore=14, spaceAfter=4,
+    fontSize=11, textColor=INK, spaceBefore=14, spaceAfter=3,
 )
 STYLE_SUBSECTION = ParagraphStyle(
     "SubsectionHeading", parent=_STYLES["Heading3"], fontName="Helvetica-Bold",
-    fontSize=9.5, textColor=INK, spaceBefore=8, spaceAfter=3,
+    fontSize=9, textColor=INK, spaceBefore=8, spaceAfter=3,
 )
 STYLE_BODY = ParagraphStyle(
     "Body", parent=_STYLES["Normal"], fontName="Helvetica",
-    fontSize=9, textColor=INK, leading=13,
+    fontSize=8.5, textColor=INK, leading=12,
 )
 STYLE_LABEL = ParagraphStyle(
     "Label", parent=_STYLES["Normal"], fontName="Helvetica-Bold",
-    fontSize=8, textColor=MUTED, leading=11,
-)
-STYLE_TAG = ParagraphStyle(
-    "Tag", parent=_STYLES["Normal"], fontName="Helvetica-Bold",
-    fontSize=7.5, textColor=BRASS, leading=10, spaceAfter=3,
+    fontSize=7.6, textColor=INK, leading=10,
 )
 STYLE_SMALL = ParagraphStyle(
     "Small", parent=_STYLES["Normal"], fontName="Helvetica",
-    fontSize=8, textColor=MUTED, leading=11,
+    fontSize=7.6, textColor=MUTED, leading=10,
+)
+STYLE_TAG = ParagraphStyle(
+    "Tag", parent=_STYLES["Normal"], fontName="Helvetica-Bold",
+    fontSize=7.5, textColor=BRASS, leading=10, spaceAfter=2,
+)
+STYLE_FINE = ParagraphStyle(
+    "Fine", parent=_STYLES["Normal"], fontName="Helvetica",
+    fontSize=6.5, textColor=FAINT, leading=9,
+)
+STYLE_FINE_BOLD = ParagraphStyle(
+    "FineBold", parent=STYLE_FINE, fontName="Helvetica-Bold",
+)
+STYLE_TH_BODY = ParagraphStyle(
+    "TableHeaderBody", parent=STYLE_BODY, fontSize=8, leading=11,
 )
 
 
@@ -132,10 +152,13 @@ def _p(value: Any, fallback: str = NOT_FOUND, style: ParagraphStyle = STYLE_BODY
     return Paragraph(_esc(_text(value, fallback)), style)
 
 
+def _pb(value: Any, fallback: str = NOT_FOUND) -> Paragraph:
+    """Bold paragraph."""
+    return Paragraph(f"<b>{_esc(_text(value, fallback))}</b>", STYLE_BODY)
+
+
 # ============================================================================
 # PARTY / OWNERSHIP HELPERS -- mirror dashboard/src/lib/lead-helpers.ts
-# (getPrimaryOwnerDisplay / isOwnerKnown / getPartiesByRole) so the PDF and
-# the dashboard never disagree about who counts as "the owner."
 # ============================================================================
 
 def _is_owner_known(lead: dict) -> bool:
@@ -166,10 +189,6 @@ def _parties_by_role(lead: dict) -> tuple[Optional[dict], Optional[dict], list[d
 
 
 def _friction_events(lead: dict) -> list[dict]:
-    # The promoted friction_events column is currently always [] for this
-    # pipeline -- the real evidence lives in the raw "events" field. See
-    # dashboard/src/lib/lead-helpers.ts's getFrictionEvidence() for the
-    # equivalent fallback on the frontend side.
     return lead.get("friction_events") or lead.get("events") or []
 
 
@@ -179,261 +198,367 @@ def _friction_events(lead: dict) -> list[dict]:
 
 def _section_heading(number_and_title: str) -> list:
     return [
+        Spacer(1, 4),
         Paragraph(number_and_title, STYLE_SECTION),
-        HRFlowable(width="100%", thickness=0.75, color=BRASS, spaceAfter=6),
+        HRFlowable(width="100%", thickness=0.5, color=HAIRLINE, spaceAfter=4),
     ]
 
 
 def _kv_table(rows: list[tuple[str, Any]], fallback: str = NOT_FOUND) -> Table:
+    """Key-value table with grey-filled label cells, matching reference PDF style."""
     data = [[_p(label, style=STYLE_LABEL), _p(value, fallback)] for label, value in rows]
-    table = Table(data, colWidths=[1.7 * inch, 4.85 * inch])
-    table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.4, HAIRLINE),
-    ]))
-    return table
-
-
-def _evidence_table_style() -> TableStyle:
-    return TableStyle([
-        ("TEXTCOLOR", (0, 0), (-1, 0), MUTED),
-        ("LINEBELOW", (0, 0), (-1, 0), 0.75, BRASS),
-        ("LINEBELOW", (0, 1), (-1, -2), 0.3, HAIRLINE),
+    table = Table(data, colWidths=[1.6 * inch, CONTENT_WIDTH - 1.6 * inch])
+    style_cmds = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 3),
         ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (0, -1), 6),
+        ("LEFTPADDING", (1, 0), (1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
+    ]
+    # Grey background on label cells
+    for i in range(len(data)):
+        style_cmds.append(("BACKGROUND", (0, i), (0, i), LABEL_BG))
+    table.setStyle(TableStyle(style_cmds))
+    return table
+
+
+def _header_row_style(num_cols: int) -> TableStyle:
+    """Dark header row style for data tables."""
+    return TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 7.6),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (0, 0), (-1, 0), 0.5, HAIRLINE),
+        ("LINEBELOW", (0, 1), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
+    ])
+
+
+def _data_table_style() -> TableStyle:
+    """Standard data table style with alternating rows."""
+    return TableStyle([
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
     ])
 
 
 # ============================================================================
-# SECTION BUILDERS -- each returns a list of flowables for the story.
+# REPORT HEADER BLOCK
 # ============================================================================
 
-def _build_title_block(lead: dict) -> list:
+def _build_report_header(lead: dict) -> list:
+    """PermitSignal wordmark + title + case metadata grid."""
     review_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-    header_table = Table(
+    app_number = _text(lead.get("application_number"), "")
+
+    meta_table = Table(
         [
-            [_p("Jurisdiction", style=STYLE_LABEL), _p(lead.get("municipality")),
-             _p("Case Number", style=STYLE_LABEL), _p(lead.get("application_number"))],
-            [_p("Property", style=STYLE_LABEL), _p(lead.get("project_address")),
+            [_p("Case Number", style=STYLE_LABEL), _p(lead.get("application_number")),
              _p("Review Date", style=STYLE_LABEL), _p(review_date)],
+            [_p("Application Type", style=STYLE_LABEL), _p(lead.get("application_type")),
+             _p("Priority", style=STYLE_LABEL), _p(lead.get("priority"))],
+            [_p("Property Address", style=STYLE_LABEL), _p(lead.get("project_address")),
+             _p("Jurisdiction", style=STYLE_LABEL), _p(lead.get("municipality"))],
             [_p("Source Packet", style=STYLE_LABEL), _p(lead.get("source")),
-             _p("Source URL", style=STYLE_LABEL), _p(lead.get("source_url"))],
+             _p("Applicant", style=STYLE_LABEL), _p(lead.get("applicant_name"))],
         ],
-        colWidths=[0.85 * inch, 2.6 * inch, 0.85 * inch, 2.25 * inch],
+        colWidths=[1.1 * inch, 2.15 * inch, 1.1 * inch, 2.15 * inch],
     )
-    header_table.setStyle(TableStyle([
+    meta_style = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
         ("TOPPADDING", (0, 0), (-1, -1), 2),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 5),
-    ]))
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
+    ]
+    for i in range(4):
+        meta_style.append(("BACKGROUND", (0, i), (0, i), LABEL_BG))
+        meta_style.append(("BACKGROUND", (2, i), (2, i), LABEL_BG))
+    meta_table.setStyle(TableStyle(meta_style))
+
     return [
+        Spacer(1, 2),
         Paragraph("PERMITSIGNAL", STYLE_TITLE),
         Paragraph("PROPERTY INTELLIGENCE CASE REPORT", STYLE_TITLE2),
-        Paragraph("DRAFT — INTERNAL PROPERTY INTELLIGENCE REVIEW · NOT A GOVERNMENT RECORD", STYLE_SUBTITLE),
-        HRFlowable(width="100%", thickness=1.2, color=BRASS, spaceAfter=10),
-        header_table,
-        Spacer(1, 10),
-    ]
-
-
-def _build_case_identification(lead: dict) -> list:
-    engineer, architect, _others = _parties_by_role(lead)
-    owner_known = _is_owner_known(lead)
-
-    rows = [
-        ("Property Owner", _primary_owner(lead) if owner_known else None),
-        ("Owner Contact", _owner_contact_name(lead)),
-        ("Applicant / Agent", lead.get("applicant_name")),
-        ("Applicant Contact", lead.get("applicant_contact_name") or lead.get("contact_name")),
-        ("Engineer", engineer.get("party_name") if engineer else None),
-        ("Architect", architect.get("party_name") if architect else None),
-        ("Property Address", lead.get("project_address")),
-        ("Parcel", lead.get("parcel_number")),
-        ("Zoning", lead.get("zoning")),
-        ("Acreage", lead.get("acreage")),
-        ("Municipality", lead.get("municipality")),
-        ("Government Staff", lead.get("staff_contact_name")),
-        ("Application Type", lead.get("application_type")),
-        ("Application Status", lead.get("status") or lead.get("lead_status")),
-    ]
-    fallback_rows = [(label, value, OWNERSHIP_NOT_ESTABLISHED if label == "Property Owner" else NOT_FOUND) for label, value in rows]
-    data = [[_p(label, style=STYLE_LABEL), _p(value, fb)] for label, value, fb in fallback_rows]
-    table = Table(data, colWidths=[1.7 * inch, 4.85 * inch])
-    table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.4, HAIRLINE),
-    ]))
-
-    return [
-        *_section_heading("1. CASE IDENTIFICATION"),
-        KeepTogether([table]),
+        Paragraph(
+            "DRAFT \u2014 INTERNAL PROPERTY INTELLIGENCE REVIEW \u00b7 NOT A GOVERNMENT RECORD",
+            STYLE_SUBTITLE,
+        ),
+        HRFlowable(width="100%", thickness=1.0, color=BRASS, spaceAfter=8),
+        meta_table,
         Spacer(1, 6),
     ]
 
 
-def _build_parties(lead: dict) -> list:
+# ============================================================================
+# CASE SUMMARY (page 1 high-level)
+# ============================================================================
+
+def _build_case_summary(lead: dict) -> list:
+    """Approval status, risk, readiness, owner, applicant in a compact summary."""
+    intel = lead.get("approval_intelligence") or {}
+    status = lead.get("approval_status") or intel.get("approval_status") or NOT_FOUND
+    risk = lead.get("deep_approval_risk") or intel.get("approval_risk") or NOT_FOUND
+    readiness = lead.get("deep_approval_readiness") or intel.get("approval_readiness") or NOT_FOUND
+    owner_known = _is_owner_known(lead)
+
+    rows = [
+        ("Approval Status", status),
+        ("Approval Risk", risk),
+        ("Approval Readiness", readiness),
+        ("Property Owner", _primary_owner(lead) if owner_known else None),
+        ("Applicant / Agent", lead.get("applicant_name")),
+        ("Organization", lead.get("company_name")),
+        ("Neighborhood", lead.get("neighborhood")),
+        ("Application Type", lead.get("application_type")),
+    ]
+    return [
+        *_section_heading("CASE SUMMARY"),
+        KeepTogether([_kv_table(rows)]),
+        Spacer(1, 4),
+    ]
+
+
+# ============================================================================
+# EXECUTIVE DIAGNOSIS
+# ============================================================================
+
+def _build_executive_diagnosis(lead: dict) -> list:
+    intel = lead.get("approval_intelligence") or {}
+    diagnosis = intel.get("executive_diagnosis")
+    if not diagnosis:
+        return []
+    return [
+        *_section_heading("EXECUTIVE DIAGNOSIS"),
+        Paragraph(_xml_escape(diagnosis), STYLE_BODY),
+        Spacer(1, 4),
+    ]
+
+
+# ============================================================================
+# HEARING / EVENT INFORMATION
+# ============================================================================
+
+def _build_hearing_information(lead: dict) -> list:
+    upcoming = bool(lead.get("has_future_opportunity") and lead.get("next_project_date"))
+    if not upcoming:
+        return []
+
+    rows = [
+        ("Next Event", lead.get("next_project_event")),
+        ("Event Date", lead.get("next_project_date")),
+        ("Event Time", lead.get("next_project_time")),
+        ("Days Until Event", lead.get("days_until_event")),
+        ("Urgency", lead.get("urgency")),
+    ]
+    future_dates = lead.get("future_project_dates") or []
+    if future_dates:
+        dates_text = "; ".join(
+            f"{d.get('label', '?')} on {d.get('value', '?')}"
+            for d in future_dates[:4]
+        )
+        rows.append(("Additional Dates", dates_text))
+
+    return [
+        *_section_heading("HEARING / EVENT INFORMATION"),
+        KeepTogether([_kv_table(rows)]),
+        Spacer(1, 4),
+    ]
+
+
+# ============================================================================
+# APPROVAL INTELLIGENCE (blockers + denial history)
+# ============================================================================
+
+def _build_approval_intelligence(lead: dict) -> list:
+    intel = lead.get("approval_intelligence") or {}
+    blockers = intel.get("approval_blockers") or []
+    denial_history = intel.get("denial_history") or []
+
+    if not blockers and not denial_history:
+        return []
+
+    flow = _section_heading("APPROVAL INTELLIGENCE")
+
+    if denial_history:
+        flow.append(Paragraph("DENIAL HISTORY", STYLE_SUBSECTION))
+        for h in denial_history:
+            event_type = (h.get("event_type") or "unknown").replace("_", " ").title()
+            event_date = h.get("event_date") or "N/A"
+            objection = h.get("objection_type") or "unknown"
+            recurrence = " [RECURRENCE]" if h.get("is_recurrence") else ""
+            flow.append(Paragraph(
+                f"<b>{_esc(event_type)}</b> ({_esc(event_date)}) \u2014 Objection: {_esc(objection)}{_esc(recurrence)}",
+                STYLE_SMALL,
+            ))
+        flow.append(Spacer(1, 4))
+
+    if blockers:
+        flow.append(Paragraph("APPROVAL BLOCKERS", STYLE_SUBSECTION))
+        for b in blockers:
+            severity = (b.get("severity") or "UNKNOWN").upper()
+            btype = (b.get("blocker_type") or "unknown").replace("_", " ").title()
+            statement = b.get("statement") or ""
+            classification = b.get("classification") or ""
+            tag = f"[{_esc(severity)}] {_esc(btype)}"
+            if classification:
+                tag += f" \u2014 {_esc(classification)}"
+            flow.append(Paragraph(f"<b>{tag}</b>", STYLE_TAG))
+            if statement:
+                flow.append(Paragraph(_xml_escape(statement), STYLE_SMALL))
+        flow.append(Spacer(1, 4))
+
+    return flow
+
+
+# ============================================================================
+# WHAT MUST CHANGE (requirements A/B/C)
+# ============================================================================
+
+def _build_requirements(lead: dict) -> list:
+    intel = lead.get("approval_intelligence") or {}
+    requirements = intel.get("requirements") or []
+    if not requirements:
+        return []
+
+    flow = _section_heading("WHAT MUST CHANGE")
+
+    group_labels = {
+        "A": "EXPLICIT GOVERNMENT REQUIREMENTS",
+        "B": "DERIVED / INFERRED",
+        "C": "PERMITSIGNAL RECOMMENDATIONS",
+    }
+    for group_key in ("A", "B", "C"):
+        items = [r for r in requirements if r.get("group") == group_key]
+        if not items:
+            continue
+        flow.append(Paragraph(f"<b>{group_labels.get(group_key, group_key)}</b>", STYLE_SUBSECTION))
+        for r in items:
+            statement = r.get("statement") or ""
+            classification = r.get("classification") or ""
+            flow.append(Paragraph(
+                f"<b>[{_esc(classification)}]</b> {_xml_escape(statement)}",
+                STYLE_SMALL,
+            ))
+    flow.append(Spacer(1, 4))
+    return flow
+
+
+# ============================================================================
+# ACTION PLAN (recommended actions + decision path)
+# ============================================================================
+
+def _build_action_plan(lead: dict) -> list:
+    intel = lead.get("approval_intelligence") or {}
+    actions = intel.get("recommended_actions") or []
+    path = intel.get("decision_path") or []
+
+    if not actions and not path:
+        return []
+
+    flow = _section_heading("ACTION PLAN")
+
+    if actions:
+        flow.append(Paragraph("RECOMMENDED ACTIONS", STYLE_SUBSECTION))
+        sorted_actions = sorted(actions, key=lambda a: a.get("priority_rank", 99))
+        for a in sorted_actions:
+            rank = a.get("priority_rank", "?")
+            action_text = a.get("action") or ""
+            deadline = a.get("deadline") or ""
+            line = f"<b>#{_esc(str(rank))}</b> {_xml_escape(action_text)}"
+            if deadline:
+                line += f" (Deadline: {_esc(deadline)})"
+            flow.append(Paragraph(line, STYLE_SMALL))
+        flow.append(Spacer(1, 4))
+
+    if path:
+        flow.append(Paragraph("DECISION PATH", STYLE_SUBSECTION))
+        for stage in path:
+            label = stage.get("stage_label") or stage.get("stage") or "Unknown"
+            status = (stage.get("status") or "unknown").replace("_", " ").title()
+            classification = stage.get("classification") or ""
+            line = f"<b>{_esc(label)}</b>: {_esc(status)}"
+            if classification:
+                line += f" [{_esc(classification)}]"
+            flow.append(Paragraph(line, STYLE_SMALL))
+        flow.append(Spacer(1, 4))
+
+    return flow
+
+
+# ============================================================================
+# STAKEHOLDERS
+# ============================================================================
+
+def _build_stakeholders(lead: dict) -> list:
     engineer, architect, others = _parties_by_role(lead)
     owner_known = _is_owner_known(lead)
     owner_primary = _primary_owner(lead)
     owner_contact = _owner_contact_name(lead)
+    intel = lead.get("approval_intelligence") or {}
+    stakeholder_actions = intel.get("stakeholder_actions") or []
 
-    flow = _section_heading("2. PARTIES — ROLES &amp; RESPONSIBILITIES")
+    has_parties = owner_known or engineer or architect or others or stakeholder_actions
+    if not has_parties:
+        return []
 
-    # 2.1 Property Owner / Principal
-    owner_block = [Paragraph("2.1 PROPERTY OWNER / PRINCIPAL", STYLE_SUBSECTION)]
+    flow = _section_heading("STAKEHOLDERS")
+
+    rows = []
     if owner_known:
-        contact_clause = f", contact {_esc(_text(owner_contact))}" if owner_contact else ""
-        owner_block.append(Paragraph(
-            f"Named on record as <b>{_esc(_text(owner_primary))}</b>{contact_clause}. "
-            f"Source: {_esc(_text(lead.get('owner_source'), UNVERIFIED))}. "
-            f"Confidence: {_esc(_text(lead.get('owner_confidence'), UNVERIFIED))}.",
-            STYLE_BODY,
-        ))
-    else:
-        owner_block.append(Paragraph(
-            f"<b>{OWNERSHIP_NOT_ESTABLISHED}.</b> The source document does not label a property owner "
-            "distinct from the applicant. PermitSignal does not substitute the applicant's name into the "
-            "owner field -- this is an evidence-backed absence, not a missing-data gap.",
-            STYLE_BODY,
-        ))
-    flow.append(KeepTogether(owner_block))
-    flow.append(Spacer(1, 4))
+        contact_clause = f" ({_esc(_text(owner_contact))})" if owner_contact else ""
+        rows.append(("Property Owner", f"{_esc(_text(owner_primary))}{contact_clause}"))
+    if lead.get("applicant_name"):
+        rows.append(("Applicant / Agent", _esc(_text(lead.get("applicant_name")))))
+    if engineer:
+        rows.append(("Engineer", f"{_esc(_text(engineer.get('party_name')))} ({_esc(_text(engineer.get('party_company'), 'company not on record'))})"))
+    if architect:
+        rows.append(("Architect", f"{_esc(_text(architect.get('party_name')))} ({_esc(_text(architect.get('party_company'), 'company not on record'))})"))
+    for party in others:
+        rows.append((_esc(_text(party.get('party_role'), 'Other Party')), _esc(_text(party.get('party_name')))))
+    if lead.get("staff_contact_name"):
+        rows.append(("Government Staff", f"{_esc(_text(lead.get('staff_contact_name')))} \u2014 {_esc(_text(lead.get('staff_contact_email')))} / {_esc(_text(lead.get('staff_contact_phone')))}"))
 
-    # 2.2 Applicant / Agent
-    applicant_block = [Paragraph("2.2 APPLICANT / AGENT", STYLE_SUBSECTION)]
-    applicant_name = lead.get("applicant_name")
-    if applicant_name:
-        if not owner_known:
-            relationship = "Property Owner not established -- relationship to any owner is unconfirmed."
-        elif applicant_name == owner_primary:
-            relationship = "Also the Property Owner on this record."
-        else:
-            relationship = "Distinct from the Property Owner."
-        applicant_block.append(Paragraph(
-            f"Named on record as <b>{_esc(_text(applicant_name))}</b>. {relationship} "
-            f"Source: {_esc(_text(lead.get('applicant_source'), UNVERIFIED))}. "
-            f"Confidence: {_esc(_text(lead.get('applicant_confidence'), UNVERIFIED))}.",
-            STYLE_BODY,
-        ))
-    else:
-        applicant_block.append(Paragraph(f"<b>{NOT_FOUND}.</b> No applicant of record.", STYLE_BODY))
-    flow.append(KeepTogether(applicant_block))
-    flow.append(Spacer(1, 4))
+    if rows:
+        flow.append(_kv_table(rows))
+        flow.append(Spacer(1, 4))
 
-    # 2.3 Engineer / Architect
-    eng_arch_block = [Paragraph("2.3 ENGINEER / ARCHITECT", STYLE_SUBSECTION)]
-    if engineer or architect or others:
-        lines = []
-        if engineer:
-            lines.append(f"Engineer: <b>{_esc(_text(engineer.get('party_name')))}</b> ({_esc(_text(engineer.get('party_company'), 'company not on record'))})")
-        if architect:
-            lines.append(f"Architect: <b>{_esc(_text(architect.get('party_name')))}</b> ({_esc(_text(architect.get('party_company'), 'company not on record'))})")
-        for party in others:
-            lines.append(f"{_esc(_text(party.get('party_role'), 'Other Party'))}: <b>{_esc(_text(party.get('party_name')))}</b>")
-        eng_arch_block.append(Paragraph("<br/>".join(lines), STYLE_BODY))
-    else:
-        eng_arch_block.append(Paragraph(
-            f"{NOT_FOUND}. No engineer, architect, or other licensed professional named on record.", STYLE_BODY,
-        ))
-    flow.append(KeepTogether(eng_arch_block))
-    flow.append(Spacer(1, 4))
-
-    # 2.4 Government Staff
-    staff_block = [Paragraph("2.4 GOVERNMENT STAFF", STYLE_SUBSECTION)]
-    if lead.get("staff_contact_name") or lead.get("staff_contact_email") or lead.get("staff_contact_phone"):
-        staff_block.append(Paragraph(
-            f"<b>{_esc(_text(lead.get('staff_contact_name')))}</b> — "
-            f"{_esc(_text(lead.get('staff_contact_email')))} / {_esc(_text(lead.get('staff_contact_phone')))}. "
-            "Government-side personnel of record. Never a commercial or applicant party.",
-            STYLE_BODY,
-        ))
-    else:
-        staff_block.append(Paragraph(f"{NOT_FOUND}. No government staff contact on record.", STYLE_BODY))
-    flow.append(KeepTogether(staff_block))
-    flow.append(Spacer(1, 6))
+    if stakeholder_actions:
+        flow.append(Paragraph("STAKEHOLDER ACTIONS", STYLE_SUBSECTION))
+        for sa in stakeholder_actions:
+            stype = sa.get("stakeholder_type") or "Unknown"
+            name = sa.get("name") or "Unknown"
+            action = sa.get("suggested_action") or ""
+            flow.append(Paragraph(
+                f"<b>{_esc(stype)}: {_esc(name)}</b> \u2014 {_xml_escape(action)}",
+                STYLE_SMALL,
+            ))
+        flow.append(Spacer(1, 4))
 
     return flow
 
 
-def _build_project_intelligence(lead: dict) -> list:
-    upcoming = bool(lead.get("has_future_opportunity") and lead.get("next_project_date"))
-    if upcoming:
-        time_clause = f" at {_text(lead.get('next_project_time'))}" if lead.get("next_project_time") else ""
-        event_line = (
-            f"{_text(lead.get('next_project_event'))} on {_text(lead.get('next_project_date'))}{time_clause} "
-            f"— urgency {_text(lead.get('urgency'))}, {_text(lead.get('days_until_event'))} day(s) out."
-        )
-    else:
-        event_line = "No upcoming project event on record."
-
-    rows = [
-        ("Application History", lead.get("application_type")),
-        ("Current Status", lead.get("lead_status")),
-        ("Project Description", lead.get("description") or lead.get("project_description")),
-        ("Next Event", event_line),
-    ]
-    return [
-        *_section_heading("3. PROJECT / APPLICATION INTELLIGENCE"),
-        KeepTogether([_kv_table(rows)]),
-        Spacer(1, 6),
-    ]
-
-
-def _build_friction(lead: dict) -> list:
-    friction_score = lead.get("friction_score") or 0
-    signals = lead.get("friction_signals") or []
-    events = _friction_events(lead)
-
-    flow = _section_heading("4. HISTORICAL FRICTION")
-
-    analysis_block = [
-        Paragraph("PERMITSIGNAL ANALYSIS", STYLE_TAG),
-        Paragraph(
-            f"Friction score <b>{friction_score}</b>. Signals: {_esc(_text(', '.join(signals) if signals else None))}. "
-            "This score is PermitSignal's computed interpretation of the source evidence below -- "
-            "not a government determination.",
-            STYLE_BODY,
-        ),
-    ]
-    flow.append(KeepTogether(analysis_block))
-    flow.append(Spacer(1, 4))
-
-    if events:
-        flow.append(Paragraph("SOURCE FACT — Historical Evidence", STYLE_TAG))
-        rows = [[_p("Date", style=STYLE_LABEL), _p("Event", style=STYLE_LABEL), _p("Severity", style=STYLE_LABEL),
-                 _p("Confidence", style=STYLE_LABEL), _p("Evidence", style=STYLE_LABEL)]]
-        for event in events:
-            rows.append([
-                _p(event.get("event_date"), style=STYLE_SMALL),
-                _p(event.get("event_type"), style=STYLE_SMALL),
-                _p(event.get("severity"), UNVERIFIED, STYLE_SMALL),
-                _p(event.get("confidence"), UNVERIFIED, STYLE_SMALL),
-                _p(_text(event.get("evidence"))[:400], style=STYLE_SMALL),
-            ])
-        table = Table(rows, colWidths=[0.65 * inch, 1.0 * inch, 0.65 * inch, 0.7 * inch, 3.0 * inch], repeatRows=1)
-        table.setStyle(_evidence_table_style())
-        flow.append(table)
-    else:
-        flow.append(Paragraph("SOURCE FACT — No historical friction evidence on record.", STYLE_SMALL))
-    flow.append(Spacer(1, 6))
-    return flow
-
+# ============================================================================
+# CONTACT INTELLIGENCE
+# ============================================================================
 
 def _build_contact_intelligence(lead: dict) -> list:
     owner_contact = _owner_contact_name(lead)
     verified = bool(lead.get("contact_is_verified"))
     public = bool(lead.get("contact_is_public"))
-    verification = "VERIFIED" if verified else ("PUBLIC — UNVERIFIED" if public else UNVERIFIED)
+    verification = "VERIFIED" if verified else ("PUBLIC \u2014 UNVERIFIED" if public else UNVERIFIED)
 
-    # Identity/value fields render an evidence-absence as NOT FOUND; only
-    # the verification-status-shaped fields below use UNVERIFIED, per
-    # CLAUDE.md Part 9 ("If a contact isn't verified: UNVERIFIED" is
-    # distinct from "If something isn't found: NOT FOUND").
     identity_rows = [
         ("Owner Contact", owner_contact),
         ("Owner Contact Email", lead.get("owner_contact_email")),
@@ -453,58 +578,150 @@ def _build_contact_intelligence(lead: dict) -> list:
 
     data = [[_p(label, style=STYLE_LABEL), _p(value, NOT_FOUND)] for label, value in identity_rows]
     data += [[_p(label, style=STYLE_LABEL), _p(value, UNVERIFIED)] for label, value in verification_rows]
-    table = Table(data, colWidths=[1.7 * inch, 4.85 * inch])
-    table.setStyle(TableStyle([
+    table = Table(data, colWidths=[1.6 * inch, CONTENT_WIDTH - 1.6 * inch])
+    style_cmds = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 4),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.4, HAIRLINE),
-    ]))
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (0, -1), 6),
+        ("LEFTPADDING", (1, 0), (1, -1), 6),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
+    ]
+    for i in range(len(data)):
+        style_cmds.append(("BACKGROUND", (0, i), (0, i), LABEL_BG))
+    table.setStyle(TableStyle(style_cmds))
 
     return [
-        *_section_heading("5. CONTACT INTELLIGENCE"),
+        *_section_heading("CONTACT INTELLIGENCE"),
         KeepTogether([table]),
-        Spacer(1, 6),
+        Spacer(1, 4),
     ]
 
 
-def _build_follow_up(lead: dict) -> list:
-    reason = lead.get("opportunity_reason")
-    contact_target = _owner_contact_name(lead) or lead.get("contact_name") or lead.get("applicant_name")
-    friction_score = lead.get("friction_score") or 0
-    signals = lead.get("friction_signals") or []
-    upcoming = bool(lead.get("has_future_opportunity") and lead.get("next_project_date"))
+# ============================================================================
+# PRICING / FEE ASSESSMENT (itemized table)
+# ============================================================================
 
-    lines = [_esc(_text(reason, "No opportunity narrative on record."))]
-    lines.append(
-        f"Likely correct property-side contact: <b>{_esc(_text(contact_target))}</b>."
-        if contact_target else f"Likely correct property-side contact: {NOT_FOUND}."
-    )
-    lines.append(
-        f"Historical hindrance on record: friction score {friction_score} ({_esc(_text(', '.join(signals) if signals else None))})."
-        if friction_score else "No historical hindrance on record."
-    )
-    lines.append(
-        f"Urgency driver: {_esc(_text(lead.get('next_project_event')))} on {_esc(_text(lead.get('next_project_date')))} "
-        f"({_esc(_text(lead.get('urgency')))})."
-        if upcoming else "No scheduled event currently creates urgency."
-    )
+def _build_pricing_assessment(lead: dict) -> list:
+    pricing = lead.get("pricing") or {}
+    if not pricing or pricing.get("status") == "error":
+        return [
+            *_section_heading("PRICING / FEE ASSESSMENT"),
+            Paragraph("Pricing data not available for this case.", STYLE_BODY),
+            Spacer(1, 4),
+        ]
 
-    body = [Paragraph(
-        "PERMITSIGNAL ANALYSIS — the recommendations below are derived only from already-computed "
-        "opportunity/friction fields; they are not a source-document statement.",
-        STYLE_TAG,
-    )]
-    body.extend(Paragraph(line, STYLE_BODY) for line in lines)
+    flow = _section_heading("PRICING / FEE ASSESSMENT")
 
-    return [
-        *_section_heading("6. FOLLOW-UP INTELLIGENCE"),
-        KeepTogether(body),
-        Spacer(1, 6),
+    fee_low = pricing.get("fee_low")
+    fee_high = pricing.get("fee_high")
+    recommended = pricing.get("recommended_fee")
+    deposit_pct = pricing.get("deposit_percent")
+    deposit_amt = pricing.get("deposit_amount")
+    rationale = pricing.get("pricing_rationale") or []
+
+    # Parse rationale into structured rows
+    rows = [
+        [_p("DESCRIPTION", style=STYLE_LABEL), _p("AMOUNT", style=STYLE_LABEL), _p("BASIS / PURPOSE", style=STYLE_LABEL)],
     ]
 
+    if rationale:
+        for line in rationale:
+            # Parse known patterns from pricing_engine rationale
+            if line.startswith("Service tier:"):
+                rows.append([
+                    _p("Service tier"),
+                    _p(""),
+                    _p(line),
+                ])
+            elif line.startswith("Base fee range:"):
+                rows.append([
+                    _p("Base fee range"),
+                    _p(line.split(": ", 1)[-1] if ": " in line else ""),
+                    _p("Before complexity adjustments"),
+                ])
+            elif line.startswith("Complexity multipliers applied:"):
+                rows.append([
+                    _p("Complexity adjustments"),
+                    _p(""),
+                    _p(line),
+                ])
+            elif line.startswith("Project value range:"):
+                rows.append([
+                    _p("Estimated project value"),
+                    _p(line.split(": ", 1)[-1] if ": " in line else ""),
+                    _p("For reference \u2014 not included in fee calculation"),
+                ])
+            elif line.startswith("Final fee range:"):
+                rows.append([
+                    _p("Final fee range"),
+                    _p(line.split(": ", 1)[-1] if ": " in line else ""),
+                    _p("After all adjustments"),
+                ])
+            elif line.startswith("Recommended fee:"):
+                rows.append([
+                    _p("Recommended engagement fee"),
+                    _p(line.split(": ", 1)[-1] if ": " in line else ""),
+                    _p("Midpoint of adjusted range"),
+                ])
+            elif line.startswith("Deposit:"):
+                rows.append([
+                    _p("Deposit"),
+                    _p(line.split(": ", 1)[-1] if ": " in line else ""),
+                    _p("Due at engagement"),
+                ])
+            else:
+                rows.append([_p(line), _p(""), _p("")])
+    else:
+        if fee_low is not None and fee_high is not None:
+            rows.append([_p("Fee range"), _p(f"${fee_low:,.0f} \u2013 ${fee_high:,.0f}"), _p("Adjusted range")])
+        if recommended is not None:
+            rows.append([_p("Recommended fee"), _p(f"${recommended:,.0f}"), _p("Midpoint")])
+        if deposit_pct is not None and deposit_amt is not None:
+            rows.append([_p("Deposit"), _p(f"{deposit_pct}% (${deposit_amt:,.0f})"), _p("Due at engagement")])
 
-def _build_evidence_register(lead: dict) -> list:
+    # TOTAL ASSESSMENT row
+    if recommended is not None:
+        rows.append([
+            Paragraph("<b>TOTAL ASSESSMENT</b>", STYLE_BODY),
+            Paragraph(f"<b>${recommended:,.0f}</b>", STYLE_BODY),
+            Paragraph("<b>Recommended engagement fee</b>", STYLE_BODY),
+        ])
+
+    table = Table(rows, colWidths=[2.0 * inch, 1.8 * inch, CONTENT_WIDTH - 3.8 * inch])
+
+    # Style: dark header, subtle rows, bold total
+    style_cmds = [
+        ("BACKGROUND", (0, 0), (-1, 0), HEADER_BG),
+        ("TEXTCOLOR", (0, 0), (-1, 0), WHITE),
+        ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+        ("FONTSIZE", (0, 0), (-1, 0), 7.6),
+        ("VALIGN", (0, 0), (-1, -1), "TOP"),
+        ("TOPPADDING", (0, 0), (-1, -1), 3),
+        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
+        ("LEFTPADDING", (0, 0), (-1, -1), 4),
+        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
+        ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
+    ]
+    # Total row background
+    if len(rows) > 1:
+        total_row = len(rows) - 1
+        style_cmds.append(("BACKGROUND", (0, total_row), (-1, total_row), LABEL_BG))
+        style_cmds.append(("LINEABOVE", (0, total_row), (-1, total_row), 0.75, INK))
+
+    table.setStyle(TableStyle(style_cmds))
+    flow.append(table)
+    flow.append(Spacer(1, 4))
+
+    return flow
+
+
+# ============================================================================
+# EVIDENCE REGISTRY
+# ============================================================================
+
+def _build_evidence_registry(lead: dict) -> list:
     entries: list[list[str]] = []
     idx = 1
     source = _text(lead.get("source"))
@@ -512,116 +729,131 @@ def _build_evidence_register(lead: dict) -> list:
 
     for event in _friction_events(lead):
         entries.append([
-            f"E-{idx:02d}", source, source_url, "Government Record",
+            f"E-{idx:02d}", source, "Government Record",
             _text(event.get("event_date")), _text(event.get("evidence"))[:220],
-            "Historical friction score/signal", _text(event.get("confidence"), UNVERIFIED),
+            "Historical friction", _text(event.get("confidence"), UNVERIFIED),
         ])
         idx += 1
 
     for date_entry in (lead.get("future_project_dates") or []):
         entries.append([
-            f"E-{idx:02d}", source, source_url, "Government Record",
+            f"E-{idx:02d}", source, "Government Record",
             _text(date_entry.get("value")), _text(date_entry.get("context"))[:220],
-            "Next project event / date", _text(date_entry.get("confidence"), UNVERIFIED),
+            "Project event / date", _text(date_entry.get("confidence"), UNVERIFIED),
         ])
         idx += 1
 
     contact_source = lead.get("contact_source") or lead.get("email_source") or lead.get("company_source")
     if contact_source:
         entries.append([
-            f"E-{idx:02d}", _text(contact_source), _text(lead.get("company_website") or lead.get("owner_website")),
-            "Public Contact Source", "—", "Contact record supplied by enrichment source above.",
-            "Contact Intelligence (Section 5)", _text(lead.get("contact_confidence"), UNVERIFIED),
+            f"E-{idx:02d}", _text(contact_source), "Public Contact Source",
+            "\u2014", "Contact record supplied by enrichment source.",
+            "Contact Intelligence", _text(lead.get("contact_confidence"), UNVERIFIED),
         ])
         idx += 1
     else:
         queries = lead.get("search_queries") or []
         if queries:
             entries.append([
-                f"E-{idx:02d}", "PermitSignal Contact Discovery", "—", "Search Attempt", "—",
-                f"Queries attempted, no verified public contact found: {', '.join(queries[:3])}",
-                "Contact Intelligence (Section 5) -- absence", "N/A",
+                f"E-{idx:02d}", "PermitSignal Contact Discovery", "Search Attempt",
+                "\u2014", f"Queries attempted, no verified contact found: {', '.join(queries[:3])}",
+                "Contact Intelligence (absence)", "N/A",
             ])
             idx += 1
 
-    flow = _section_heading("7. EVIDENCE REGISTER")
+    flow = _section_heading("EVIDENCE REGISTRY")
 
     if not entries:
         flow.append(Paragraph(
-            "No additional evidence on record beyond the source packet cited in the title block.", STYLE_SMALL,
+            "No additional evidence on record beyond the source packet cited in the title block.",
+            STYLE_SMALL,
         ))
-        flow.append(Spacer(1, 6))
+        flow.append(Spacer(1, 4))
         return flow
 
-    header = ["ID", "Source", "URL / Document", "Type", "Date", "Excerpt", "Supports", "Confidence"]
+    header = ["ID", "Source", "Type", "Date", "Excerpt", "Supports", "Confidence"]
     rows = [[_p(h, style=STYLE_LABEL) for h in header]]
     for entry in entries:
         rows.append([_p(cell, style=STYLE_SMALL) for cell in entry])
 
     table = Table(
         rows,
-        colWidths=[0.35 * inch, 0.75 * inch, 1.0 * inch, 0.75 * inch, 0.55 * inch, 1.7 * inch, 1.0 * inch, 0.55 * inch],
+        colWidths=[0.35 * inch, 0.85 * inch, 0.7 * inch, 0.55 * inch, 2.2 * inch, 1.0 * inch, 0.55 * inch],
         repeatRows=1,
     )
-    table.setStyle(_evidence_table_style())
+    table.setStyle(_data_table_style())
     flow.append(table)
-    flow.append(Spacer(1, 6))
+    flow.append(Spacer(1, 4))
     return flow
 
 
-def _build_verification_checklist(lead: dict) -> list:
-    owner_known = _is_owner_known(lead)
-    applicant_present = bool(lead.get("applicant_name"))
-    staff_present = bool(lead.get("staff_contact_name") or lead.get("staff_contact_email"))
-    contact_verified = bool(lead.get("contact_is_verified"))
-    contact_source_present = bool(lead.get("contact_source") or lead.get("email_source") or lead.get("phone_source"))
-    project_date_present = bool(lead.get("next_project_date"))
-    friction_evidence_present = bool(_friction_events(lead))
-    same_party = owner_known and applicant_present and _primary_owner(lead) == lead.get("applicant_name")
+# ============================================================================
+# RELEVANT SOURCES
+# ============================================================================
 
-    checklist = [
-        ("Owner verified", "YES" if owner_known else "NOT ESTABLISHED"),
-        ("Owner contact verified", "YES" if _owner_contact_name(lead) else "NOT ESTABLISHED"),
-        ("Applicant verified", "YES" if applicant_present else "NOT ON RECORD"),
-        ("Applicant/owner relationship checked",
-         "SAME PARTY" if same_party else ("DISTINCT" if owner_known else "OWNER NOT ESTABLISHED")),
-        ("Government staff separated", "YES" if staff_present else "NO STAFF ON RECORD"),
-        ("Contact source verified",
-         "VERIFIED" if contact_verified else ("SOURCED — UNVERIFIED" if contact_source_present else "NO CONTACT SOURCE")),
-        ("Project date verified", "YES" if project_date_present else "NO UPCOMING EVENT"),
-        ("Friction evidence verified", "YES" if friction_evidence_present else "NO FRICTION EVIDENCE"),
-        ("Case source retained", "YES" if lead.get("source_url") else "NO SOURCE URL"),
-        ("Follow-up recommendation reviewed", "PENDING MANUAL REVIEW"),
-    ]
+def _build_relevant_sources(lead: dict) -> list:
+    source = lead.get("source")
+    source_url = lead.get("source_url")
+    if not source and not source_url:
+        return []
 
-    rows = [[_p(label, style=STYLE_BODY), Paragraph(status, STYLE_BODY)] for label, status in checklist]
-    table = Table(rows, colWidths=[3.7 * inch, 2.85 * inch])
-    table.setStyle(TableStyle([
-        ("VALIGN", (0, 0), (-1, -1), "TOP"),
-        ("TOPPADDING", (0, 0), (-1, -1), 3),
-        ("BOTTOMPADDING", (0, 0), (-1, -1), 3),
-        ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
-    ]))
-
-    signoff = Table(
-        [
-            [_p("Prepared By", style=STYLE_LABEL), _p("Reviewed By", style=STYLE_LABEL),
-             _p("Date", style=STYLE_LABEL), _p("Status", style=STYLE_LABEL)],
-            [Paragraph("", STYLE_BODY)] * 4,
-        ],
-        colWidths=[1.65 * inch] * 4,
-        rowHeights=[16, 28],
-    )
-    signoff.setStyle(TableStyle([
-        ("LINEBELOW", (0, 1), (-1, 1), 0.6, INK),
-        ("TOPPADDING", (0, 0), (-1, -1), 4),
-    ]))
+    rows = [("Source Packet", source), ("Source URL", source_url)]
+    approval_source = lead.get("approval_source")
+    if approval_source and approval_source != source_url:
+        rows.append(("Approval Source", approval_source))
 
     return [
-        *_section_heading("8. INTERNAL VERIFICATION CHECKLIST"),
-        table,
-        Spacer(1, 10),
-        signoff,
+        *_section_heading("RELEVANT SOURCES"),
+        KeepTogether([_kv_table(rows)]),
+        Spacer(1, 4),
+    ]
+
+
+# ============================================================================
+# UNRESOLVED QUESTIONS + MODEL WARNINGS
+# ============================================================================
+
+def _build_model_output(lead: dict) -> list:
+    intel = lead.get("approval_intelligence") or {}
+    warnings = intel.get("model_warnings") or []
+    questions = intel.get("unresolved_questions") or []
+
+    if not warnings and not questions:
+        return []
+
+    flow = _section_heading("MODEL WARNINGS &amp; UNRESOLVED QUESTIONS")
+
+    if warnings:
+        flow.append(Paragraph("MODEL WARNINGS", STYLE_SUBSECTION))
+        for w in warnings:
+            flow.append(Paragraph(f"\u2022 {_xml_escape(str(w))}", STYLE_SMALL))
+        flow.append(Spacer(1, 4))
+
+    if questions:
+        flow.append(Paragraph("UNRESOLVED QUESTIONS", STYLE_SUBSECTION))
+        for q in questions:
+            flow.append(Paragraph(f"\u2022 {_xml_escape(str(q))}", STYLE_SMALL))
+        flow.append(Spacer(1, 4))
+
+    return flow
+
+
+# ============================================================================
+# DISCLAIMER
+# ============================================================================
+
+def _build_disclaimer(lead: dict) -> list:
+    return [
+        Spacer(1, 8),
+        HRFlowable(width="100%", thickness=0.5, color=HAIRLINE, spaceAfter=4),
+        Paragraph(
+            "<b>Applicant notice:</b> This case report is a PermitSignal-generated internal intelligence "
+            "review. It does not independently create or determine planning, zoning, hearing, or "
+            "development obligations. All pricing is PermitSignal's assessment, not a government-issued "
+            "charge. Verify against the current official agenda and case record before issuance.",
+            STYLE_FINE,
+        ),
+        Spacer(1, 4),
     ]
 
 
@@ -630,7 +862,7 @@ def _build_verification_checklist(lead: dict) -> list:
 # ============================================================================
 
 class _CaseReportCanvas(Canvas):
-    """Standard ReportLab two-pass recipe for accurate 'Page X of Y' numbering."""
+    """Two-pass recipe for accurate 'Page X of Y' and per-page header/footer."""
 
     def __init__(self, *args, **kwargs):
         Canvas.__init__(self, *args, **kwargs)
@@ -649,35 +881,41 @@ class _CaseReportCanvas(Canvas):
         Canvas.save(self)
 
     def _draw_page_furniture(self, total_pages: int) -> None:
-        # Deliberately no full-page background fill here: this canvas
-        # subclass replays header/footer drawing AFTER each page's body
-        # content is already in the PDF content stream (see save()), so a
-        # full-page rect at this point would paint over the body -- it
-        # must stay confined to the header/footer strips outside the
-        # content frame's margins.
         width, height = PAGE_SIZE
 
-        self.setFillColor(INK)
-        self.setFont("Helvetica-Bold", 9)
-        self.drawString(MARGIN, height - 0.45 * inch, "PERMITSIGNAL")
-        self.setFillColor(BRASS)
-        self.setFont("Helvetica", 8)
-        self.drawRightString(width - MARGIN, height - 0.45 * inch, "PROPERTY INTELLIGENCE CASE REPORT")
-        self.setStrokeColor(BRASS)
-        self.setLineWidth(1)
-        self.line(MARGIN, height - 0.55 * inch, width - MARGIN, height - 0.55 * inch)
+        # -- Dark header band --
+        self.setFillColor(HEADER_BG)
+        self.rect(0, height - 0.65 * inch, width, 0.65 * inch, fill=1, stroke=0)
 
+        # -- Wordmark in header --
+        self.setFillColor(WHITE)
+        self.setFont("Helvetica-Bold", 9)
+        self.drawString(MARGIN, height - 0.42 * inch, "PERMITSIGNAL")
+
+        # -- Report title in header --
+        self.setFillColor(colors.HexColor("#c0c4c8"))
+        self.setFont("Helvetica", 7.5)
+        self.drawRightString(width - MARGIN, height - 0.42 * inch, "PROPERTY INTELLIGENCE CASE REPORT")
+
+        # -- Brass accent line below header --
+        self.setStrokeColor(BRASS)
+        self.setLineWidth(1.5)
+        self.line(0, height - 0.65 * inch, width, height - 0.65 * inch)
+
+        # -- Footer separator --
         self.setStrokeColor(HAIRLINE)
         self.setLineWidth(0.5)
         self.line(MARGIN, 0.55 * inch, width - MARGIN, 0.55 * inch)
-        self.setFillColor(MUTED)
-        self.setFont("Helvetica", 7.5)
-        self.drawString(MARGIN, 0.4 * inch, "PermitSignal — Internal Case Intelligence — Not a government record")
+
+        # -- Footer text --
+        self.setFillColor(FAINT)
+        self.setFont("Helvetica", 6)
+        self.drawString(MARGIN, 0.4 * inch, "PermitSignal \u2014 Internal Case Intelligence \u2014 Not a government record")
         self.drawRightString(width - MARGIN, 0.4 * inch, f"Page {self._pageNumber} of {total_pages}")
 
 
 # ============================================================================
-# PUBLIC API
+# PUBLIC API -- data loading (unchanged from original)
 # ============================================================================
 
 def _load_output(output_path: "Path | str" = DEFAULT_OUTPUT) -> Optional[dict]:
@@ -716,184 +954,6 @@ def load_lead_queue(output_path: "Path | str" = DEFAULT_OUTPUT) -> list[dict]:
 
 
 # ============================================================================
-# DEEP INTELLIGENCE SECTIONS (from approval_intelligence_engine)
-# ============================================================================
-
-
-def _build_executive_diagnosis(lead: dict) -> list:
-    """Section: Executive Diagnosis from deep intelligence."""
-    intel = lead.get("approval_intelligence") or {}
-    diagnosis = intel.get("executive_diagnosis")
-    if not diagnosis:
-        return []
-    return [
-        Paragraph("EXECUTIVE DIAGNOSIS", STYLE_SECTION),
-        Paragraph(_xml_escape(diagnosis), STYLE_BODY),
-        Spacer(1, 6),
-    ]
-
-
-def _build_denial_history(lead: dict) -> list:
-    """Section: Denial History."""
-    intel = lead.get("approval_intelligence") or {}
-    history = intel.get("denial_history") or []
-    if not history:
-        return []
-    story: list = [Paragraph("DENIAL HISTORY", STYLE_SECTION)]
-    for h in history:
-        event_type = (h.get("event_type") or "unknown").replace("_", " ").title()
-        event_date = h.get("event_date") or "N/A"
-        objection = h.get("objection_type") or "unknown"
-        recurrence = " [RECURRENCE]" if h.get("is_recurrence") else ""
-        story.append(
-            Paragraph(
-                f"<b>{event_type}</b> ({event_date}) -- Objection: {objection}{recurrence}",
-                STYLE_SMALL,
-            )
-        )
-    story.append(Spacer(1, 6))
-    return story
-
-
-def _build_approval_blockers(lead: dict) -> list:
-    """Section: Approval Blockers."""
-    intel = lead.get("approval_intelligence") or {}
-    blockers = intel.get("approval_blockers") or []
-    if not blockers:
-        return []
-    story: list = [Paragraph("APPROVAL BLOCKERS", STYLE_SECTION)]
-    for b in blockers:
-        severity = (b.get("severity") or "UNKNOWN").upper()
-        btype = (b.get("blocker_type") or "unknown").replace("_", " ").title()
-        statement = b.get("statement") or ""
-        classification = b.get("classification") or ""
-        tag = f"[{severity}] {btype}"
-        if classification:
-            tag += f" -- {classification}"
-        story.append(Paragraph(f"<b>{_xml_escape(tag)}</b>", STYLE_TAG))
-        if statement:
-            story.append(Paragraph(_xml_escape(statement), STYLE_SMALL))
-    story.append(Spacer(1, 6))
-    return story
-
-
-def _build_requirements_intelligence(lead: dict) -> list:
-    """Section: Requirements (Groups A / B / C)."""
-    intel = lead.get("approval_intelligence") or {}
-    requirements = intel.get("requirements") or []
-    if not requirements:
-        return []
-    story: list = [Paragraph("REQUIREMENTS", STYLE_SECTION)]
-    group_labels = {
-        "A": "EXPLICIT GOVERNMENT REQUIREMENTS",
-        "B": "DERIVED / INFERRED",
-        "C": "PERMITSIGNAL RECOMMENDATIONS",
-    }
-    for group_key in ("A", "B", "C"):
-        items = [r for r in requirements if r.get("group") == group_key]
-        if not items:
-            continue
-        story.append(Paragraph(f"<b>{group_labels.get(group_key, group_key)}</b>", STYLE_SUBSECTION))
-        for r in items:
-            statement = r.get("statement") or ""
-            classification = r.get("classification") or ""
-            story.append(Paragraph(
-                f"<b>[{classification}]</b> {_xml_escape(statement)}",
-                STYLE_SMALL,
-            ))
-    story.append(Spacer(1, 6))
-    return story
-
-
-def _build_actions_intelligence(lead: dict) -> list:
-    """Section: Recommended Actions."""
-    intel = lead.get("approval_intelligence") or {}
-    actions = intel.get("recommended_actions") or []
-    if not actions:
-        return []
-    sorted_actions = sorted(actions, key=lambda a: a.get("priority_rank", 99))
-    story: list = [Paragraph("RECOMMENDED ACTIONS", STYLE_SECTION)]
-    for a in sorted_actions:
-        rank = a.get("priority_rank", "?")
-        action_text = a.get("action") or ""
-        deadline = a.get("deadline") or ""
-        line = f"<b>#{rank}</b> {_xml_escape(action_text)}"
-        if deadline:
-            line += f" (Deadline: {deadline})"
-        story.append(Paragraph(line, STYLE_SMALL))
-    story.append(Spacer(1, 6))
-    return story
-
-
-def _build_decision_path_intelligence(lead: dict) -> list:
-    """Section: Decision Path."""
-    intel = lead.get("approval_intelligence") or {}
-    path = intel.get("decision_path") or []
-    if not path:
-        return []
-    story: list = [Paragraph("DECISION PATH", STYLE_SECTION)]
-    for stage in path:
-        label = stage.get("stage_label") or stage.get("stage") or "Unknown"
-        status = (stage.get("status") or "unknown").replace("_", " ").title()
-        classification = stage.get("classification") or ""
-        line = f"<b>{_xml_escape(label)}</b>: {status}"
-        if classification:
-            line += f" [{classification}]"
-        story.append(Paragraph(line, STYLE_SMALL))
-    story.append(Spacer(1, 6))
-    return story
-
-
-def _build_client_message_intelligence(lead: dict) -> list:
-    """Section: Client Message (from intelligence engine)."""
-    intel = lead.get("approval_intelligence") or {}
-    message = intel.get("client_message")
-    if not message:
-        return []
-    return [
-        Paragraph("CLIENT MESSAGE", STYLE_SECTION),
-        Paragraph(_xml_escape(message), STYLE_SMALL),
-        Spacer(1, 6),
-    ]
-
-
-def _build_pricing_intelligence(lead: dict) -> list:
-    """Section: Pricing (from pricing engine)."""
-    pricing = lead.get("pricing") or {}
-    if not pricing or pricing.get("status") == "error":
-        return []
-    story: list = [Paragraph("PRICING", STYLE_SECTION)]
-    fee_low = pricing.get("fee_low")
-    fee_high = pricing.get("fee_high")
-    recommended = pricing.get("recommended_fee")
-    deposit_pct = pricing.get("deposit_percent")
-    deposit_amt = pricing.get("deposit_amount")
-    if fee_low is not None and fee_high is not None:
-        story.append(Paragraph(
-            f"<b>Fee range:</b> ${fee_low:,.0f} -- ${fee_high:,.0f}",
-            STYLE_SMALL,
-        ))
-    if recommended is not None:
-        story.append(Paragraph(
-            f"<b>Recommended fee:</b> ${recommended:,.0f}",
-            STYLE_SMALL,
-        ))
-    if deposit_pct is not None and deposit_amt is not None:
-        story.append(Paragraph(
-            f"<b>Deposit:</b> {deposit_pct}% (${deposit_amt:,.0f})",
-            STYLE_SMALL,
-        ))
-    rationale = pricing.get("pricing_rationale") or []
-    if rationale:
-        story.append(Spacer(1, 4))
-        story.append(Paragraph("<b>Pricing Rationale:</b>", STYLE_LABEL))
-        for line in rationale:
-            story.append(Paragraph(f"  {_xml_escape(line)}", STYLE_SMALL))
-    story.append(Spacer(1, 6))
-    return story
-
-
-# ============================================================================
 # MAIN PDF GENERATION
 # ============================================================================
 
@@ -913,25 +973,34 @@ def generate_case_report_pdf(lead: dict) -> bytes:
     )
 
     story: list = []
-    story.extend(_build_title_block(lead))
-    story.extend(_build_case_identification(lead))
-    story.extend(_build_parties(lead))
-    story.extend(_build_project_intelligence(lead))
-    story.extend(_build_friction(lead))
-    story.extend(_build_contact_intelligence(lead))
-    story.extend(_build_follow_up(lead))
-    # Deep intelligence sections (from approval_intelligence_engine)
+
+    # -- Page 1: header + high-level summary --
+    story.extend(_build_report_header(lead))
+    story.extend(_build_case_summary(lead))
     story.extend(_build_executive_diagnosis(lead))
-    story.extend(_build_denial_history(lead))
-    story.extend(_build_approval_blockers(lead))
-    story.extend(_build_requirements_intelligence(lead))
-    story.extend(_build_actions_intelligence(lead))
-    story.extend(_build_decision_path_intelligence(lead))
-    story.extend(_build_pricing_intelligence(lead))
-    story.extend(_build_client_message_intelligence(lead))
-    # Existing evidence and verification
-    story.extend(_build_evidence_register(lead))
-    story.extend(_build_verification_checklist(lead))
+    story.extend(_build_hearing_information(lead))
+
+    # -- Detailed intelligence sections --
+    story.extend(_build_approval_intelligence(lead))
+    story.extend(_build_requirements(lead))
+    story.extend(_build_action_plan(lead))
+
+    # -- Parties + contacts --
+    story.extend(_build_stakeholders(lead))
+    story.extend(_build_contact_intelligence(lead))
+
+    # -- Pricing (itemized fee table) --
+    story.extend(_build_pricing_assessment(lead))
+
+    # -- Evidence + sources --
+    story.extend(_build_evidence_registry(lead))
+    story.extend(_build_relevant_sources(lead))
+
+    # -- Model output --
+    story.extend(_build_model_output(lead))
+
+    # -- Disclaimer --
+    story.extend(_build_disclaimer(lead))
 
     doc.build(story, canvasmaker=_CaseReportCanvas)
     return buffer.getvalue()

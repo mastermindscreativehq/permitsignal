@@ -63,14 +63,22 @@ export function CaseHeader({ lead }: { lead: Lead }) {
               Next: {titleCase(lead.recommended_commercial_action)}
             </p>
           )}
-          <a
-            href={`${PERMITSIGNAL_API_URL}/leads/${lead.application_number}/report.pdf`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-accent hover:text-accent-strong"
-          >
-            Download Case Report (PDF)
-          </a>
+          <div className="flex flex-col items-end gap-1.5 sm:shrink-0">
+            <a
+              href={`${PERMITSIGNAL_API_URL}/leads/${lead.application_number}/report.pdf`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="rounded-md border border-border-subtle bg-surface px-3 py-1.5 text-xs font-medium text-foreground-muted transition-colors hover:border-accent hover:text-accent-strong"
+            >
+              Download Case Report (PDF)
+            </a>
+            <a
+              href="#case-report-history"
+              className="text-[11px] font-medium text-foreground-faint transition-colors hover:text-accent-strong"
+            >
+              View Report History →
+            </a>
+          </div>
         </div>
       </div>
     </div>

@@ -4,7 +4,7 @@ import { useState, useCallback } from "react";
 import type { Lead } from "@/lib/types";
 import { formatDate } from "@/lib/format";
 import { Badge } from "@/components/ui/Badge";
-import { SectionCard } from "./SectionCard";
+
 
 type Intel = NonNullable<Lead["approval_intelligence"]>;
 
@@ -52,7 +52,10 @@ function Collapsible({
 }) {
   return (
     <details open={defaultOpen} className="group">
-      <summary className="flex cursor-pointer items-center gap-2 select-none">
+      <summary
+        className="flex cursor-pointer items-center gap-2 select-none"
+        onClick={(e) => { e.stopPropagation(); }}
+      >
         <svg
           className="h-3 w-3 shrink-0 text-foreground-faint transition-transform group-open:rotate-90"
           viewBox="0 0 12 12"
@@ -474,8 +477,76 @@ export function DeepIntelligenceCard({ lead }: { lead: Lead }) {
   const evidenceCount = intel.evidence?.length ?? 0;
   const denialCount = intel.denial_history?.length ?? 0;
 
+  const [expanded, setExpanded] = useState(false);
+
   return (
-    <SectionCard title="Deep Approval Intelligence" description="Full evidence-backed intelligence package">
+    <details open={expanded} className="group rounded-lg border border-border-subtle bg-card">
+      <summary
+        className="flex cursor-pointer items-center justify-between px-5 py-4 select-none"
+        onClick={(e) => {
+          e.preventDefault();
+          setExpanded(!expanded);
+        }}
+      >
+        <div className="flex items-center gap-3">
+          <svg
+            className={`h-4 w-4 shrink-0 text-foreground-faint transition-transform ${expanded ? "rotate-90" : ""}`}
+            viewBox="0 0 12 12"
+            fill="currentColor"
+          >
+            <path d="M4.5 2l4 4-4 4" />
+          </svg>
+          <h3 className="text-[13px] font-semibold uppercase tracking-[0.1em] text-foreground">
+            Deep Approval Intelligence
+          </h3>
+          {intel.approval_status && (
+            <Badge
+              variant={
+                intel.approval_status.toLowerCase().includes("denied")
+                  ? "status-negative"
+                  : intel.approval_status.toLowerCase().includes("pending") || intel.approval_status.toLowerCase().includes("scheduled")
+                  ? "status-caution"
+                  : "status-positive"
+              }
+            >
+              {intel.approval_status}
+            </Badge>
+          )}
+          {intel.approval_risk && (
+            <Badge
+              variant={
+                intel.approval_risk === "HIGH"
+                  ? "status-negative"
+                  : intel.approval_risk === "MEDIUM"
+                  ? "status-caution"
+                  : "status-positive"
+              }
+            >
+              Risk: {intel.approval_risk}
+            </Badge>
+          )}
+          {intel.approval_readiness && (
+            <Badge
+              variant={
+                intel.approval_readiness === "NOT_READY"
+                  ? "status-negative"
+                  : intel.approval_readiness === "PROVISIONAL"
+                  ? "status-caution"
+                  : "status-positive"
+              }
+            >
+              {intel.approval_readiness}
+            </Badge>
+          )}
+          {lead.pricing?.recommended_fee && (
+            <Badge variant="status-neutral">
+              ${lead.pricing.recommended_fee.toLocaleString()}
+            </Badge>
+          )}
+        </div>
+      </summary>
+
+      <div hidden={!expanded} className="flex flex-col gap-5 px-5 pb-5">
       <div className="space-y-5">
 
         {/* ── Executive Diagnosis (always visible, top priority) ── */}
@@ -485,7 +556,7 @@ export function DeepIntelligenceCard({ lead }: { lead: Lead }) {
           </div>
         )}
 
-        {/* ── Status Badges ── */}
+        {/* ── Status Badges (full with labels, in expanded view) ── */}
         <div className="flex flex-wrap gap-2">
           {intel.approval_status && (
             <Badge
@@ -695,6 +766,7 @@ export function DeepIntelligenceCard({ lead }: { lead: Lead }) {
           </Collapsible>
         )}
       </div>
-    </SectionCard>
+      </div>
+    </details>
   );
 }

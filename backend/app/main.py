@@ -9,8 +9,8 @@ from pydantic import BaseModel
 from backend.app.collectors.provo import (
     collect_provo_records_dict,
 )
-from backend.app.services import case_report_generator, discovery_orchestrator, document_downloader
-from backend.app.services import lead_repository, opportunity_builder, outreach_intelligence, pipeline_orchestrator
+from backend.app.services import applicant_enrichment, case_report_generator, case_report_store, discovery_orchestrator, document_downloader
+from backend.app.services import lead_repository, matrix_engine, opportunity_builder, outreach_intelligence, pipeline_orchestrator
 from backend.app.services import investigation_engine
 
 
@@ -262,13 +262,12 @@ def get_lead(application_number: str):
 def get_case_report_pdf(application_number: str):
     """
     Renders the PermitSignal Property Intelligence Case Report PDF for a
-    single lead, read from the pipeline's production JSON artifact
-    (data/output/permitsignal_opportunities.json). See
-    backend/app/services/case_report_generator.py for the no-fabrication
-    rendering rules this follows.
+    single lead. Uses the same Supabase-primary / JSON-fallback lookup as
+    GET /leads/{application_number} so the report endpoint can find any
+    lead the case page can display.
     """
     try:
-        lead = case_report_generator.load_lead_by_application_number(application_number)
+        lead = _fetch_lead_any_source(application_number)
 
         if lead is None:
             raise HTTPException(
@@ -284,6 +283,179 @@ def get_case_report_pdf(application_number: str):
             headers={
                 "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}.pdf"',
             },
+        )
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Case Report History endpoints
+# ---------------------------------------------------------------------------
+
+
+@app.post("/leads/{application_number}/report")
+def generate_and_store_report(application_number: str):
+    """
+    Generates a Property Intelligence Case Report PDF for a lead and
+    persists the result to Supabase as a versioned artifact. Returns
+    the stored record metadata (without the PDF payload); use
+    GET .../reports/{version}/pdf to download the actual PDF.
+    """
+    try:
+        lead = _fetch_lead_any_source(application_number)
+
+        if lead is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No lead on record for application_number={application_number!r}",
+            )
+
+        stored = case_report_store.generate_and_store(lead, generated_by="api")
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "version": stored.get("version"),
+            "generated_at": stored.get("generated_at"),
+            "page_count": stored.get("page_count"),
+            "file_size_bytes": stored.get("file_size_bytes"),
+            "checksum": stored.get("checksum"),
+            "storage": "supabase" if case_report_store.is_configured() else "memory_only",
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.get("/leads/{application_number}/reports")
+def list_case_reports(application_number: str, limit: int = 20):
+    """
+    Returns the case report history for an application, newest first.
+    Each record includes metadata (version, timestamp, page count, size)
+    but not the PDF payload itself. Use GET .../reports/{version}/pdf
+    to download a specific version.
+    """
+    try:
+        if not case_report_store.is_configured():
+            return {
+                "status": "success",
+                "application_number": application_number,
+                "count": 0,
+                "reports": [],
+                "storage": "not_configured",
+            }
+
+        reports = case_report_store.fetch_reports(application_number, limit=limit)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "count": len(reports),
+            "reports": reports,
+            "storage": "supabase",
+        }
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.get("/leads/{application_number}/reports/{version}")
+def get_case_report_metadata(application_number: str, version: int):
+    """
+    Returns the stored case report record metadata for a specific version.
+    Does not include the PDF payload; use .../reports/{version}/pdf for that.
+    """
+    try:
+        if not case_report_store.is_configured():
+            raise HTTPException(
+                status_code=404,
+                detail="Case report storage is not configured (Supabase required).",
+            )
+
+        record = case_report_store.fetch_report(application_number, version)
+
+        if record is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No case report found for application_number={application_number!r} version={version}",
+            )
+
+        # Strip pdf_base64 from response
+        record.pop("pdf_base64", None)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "report": record,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.get("/leads/{application_number}/reports/{version}/pdf")
+def get_case_report_pdf_version(application_number: str, version: int):
+    """
+    Downloads the actual PDF for a specific stored case report version.
+    Falls back to on-the-fly generation if Supabase is not configured
+    and version=1 is requested.
+    """
+    try:
+        if case_report_store.is_configured():
+            record = case_report_store.fetch_report(application_number, version)
+            if record is not None:
+                pdf_bytes = case_report_store.get_pdf_bytes(record)
+                if pdf_bytes:
+                    return Response(
+                        content=pdf_bytes,
+                        media_type="application/pdf",
+                        headers={
+                            "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}_v{version}.pdf"',
+                        },
+                    )
+
+        # Fallback: generate on the fly for version 1 if storage is unavailable
+        if version == 1:
+            lead = _fetch_lead_any_source(application_number)
+            if lead is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"No lead on record for application_number={application_number!r}",
+                )
+            pdf_bytes = case_report_generator.generate_case_report_pdf(lead)
+            return Response(
+                content=pdf_bytes,
+                media_type="application/pdf",
+                headers={
+                    "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}.pdf"',
+                },
+            )
+
+        raise HTTPException(
+            status_code=404,
+            detail=f"No case report found for application_number={application_number!r} version={version}",
         )
 
     except HTTPException:
@@ -774,6 +946,93 @@ def investigate_all(application_number: str, request: InvestigationRequest):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+@app.post("/leads/{application_number}/enrich")
+def enrich_lead(application_number: str):
+    """
+    Single-lead live contact enrichment boundary. Calls the existing
+    applicant_enrichment.enrich_applicant_contact() with live_search=True
+    to perform public-web SerpAPI searches for this one applicant. Preserves
+    government-record contact precedence (never overwrites a government-
+    sourced email/phone with a lower-confidence public-web guess).
+    Persists the enriched lead to Supabase via the same path the
+    investigation endpoints use.
+    """
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+
+        enrichment = applicant_enrichment.enrich_applicant_contact(
+            lead, live_search=True,
+        )
+
+        if not isinstance(enrichment, dict):
+            raise HTTPException(
+                status_code=500,
+                detail="enrich_applicant_contact returned an unexpected type",
+            )
+
+        # Government-record precedence: never overwrite a government-
+        # sourced email/phone with a lower-confidence public-web guess.
+        government_email = lead.get("applicant_email")
+        government_phone = lead.get("applicant_phone")
+
+        # Merge enrichment results onto the lead (overlay non-None keys).
+        for key, value in enrichment.items():
+            if value is not None:
+                lead[key] = value
+
+        if government_email:
+            lead["applicant_email"] = government_email
+            lead["email_source"] = "government_record"
+            lead["email_confidence"] = 1.0
+
+        if government_phone:
+            lead["applicant_phone"] = government_phone
+            lead["phone_source"] = "government_record"
+            lead["phone_confidence"] = 1.0
+
+        # Additive discovered parties (same pattern as pipeline_orchestrator).
+        discovered_parties = enrichment.get("discovered_parties")
+        if discovered_parties:
+            lead["parties"] = list(lead.get("parties") or []) + list(
+                discovered_parties
+            )
+        lead.pop("discovered_parties", None)
+
+        lead["enrichment_status"] = enrichment.get(
+            "enrichment_status", "enriched"
+        )
+
+        _persist_investigation_lead(lead)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "enrichment_status": lead.get("enrichment_status"),
+            "enrichment_method": enrichment.get("enrichment_method"),
+            "applicant_email": lead.get("applicant_email"),
+            "applicant_phone": lead.get("applicant_phone"),
+            "email_confidence": lead.get("email_confidence"),
+            "phone_confidence": lead.get("phone_confidence"),
+            "company_website": lead.get("company_website"),
+            "company_name": lead.get("company_name"),
+            "contact_name": lead.get("contact_name"),
+            "contact_email": lead.get("contact_email"),
+            "contact_phone": lead.get("contact_phone"),
+            "contact_source": lead.get("contact_source"),
+            "contact_confidence": lead.get("contact_confidence"),
+            "contact_is_public": lead.get("contact_is_public"),
+            "contact_is_verified": lead.get("contact_is_verified"),
+            "company_source": lead.get("company_source"),
+            "linkedin_url": lead.get("linkedin_url"),
+            "sources_count": len(enrichment.get("sources", [])),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 def _parse_reference_date(value: Optional[str]) -> Optional[date]:
     """
     pipeline_orchestrator.run_pipeline() requires reference_date as a
@@ -835,6 +1094,153 @@ def pipeline_ingest(request: PipelineIngestRequest):
                 "lead_queue": len(result.get("lead_queue", [])),
             },
             "supabase_sync": metadata.get("supabase_sync"),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+# ---------------------------------------------------------------------------
+# Profile Matrix endpoints
+# ---------------------------------------------------------------------------
+
+class MatrixGenerateRequest(BaseModel):
+    instruction: str
+    is_draft: bool = False
+    previous_version: Optional[int] = None
+
+
+@app.post("/leads/{application_number}/matrix")
+def matrix_generate(application_number: str, request: MatrixGenerateRequest):
+    """
+    Profile Matrix generation boundary: executes a Matrix instruction against
+    an existing lead profile. Reads the lead (read-only), builds profile
+    context, calls the configured LLM, stores the output as a versioned
+    artifact in matrix_outputs, and returns it. The source lead record is
+    NEVER mutated.
+    """
+    try:
+        lead = _fetch_lead_any_source(application_number)
+
+        if lead is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No lead on record for application_number={application_number!r}",
+            )
+
+        previous_output = None
+        if request.previous_version is not None:
+            previous_record = matrix_engine.fetch_output_by_version(
+                application_number, request.previous_version,
+            )
+            if previous_record is not None:
+                previous_output = previous_record.get("output")
+
+        generated_output = matrix_engine.execute_matrix_instruction(
+            lead, request.instruction, previous_output=previous_output,
+        )
+
+        version = matrix_engine.get_next_version(application_number)
+
+        if request.is_draft:
+            stored = matrix_engine.save_draft(
+                application_number=application_number,
+                instruction=request.instruction,
+                output=generated_output,
+            )
+        else:
+            stored = matrix_engine.save_final(
+                application_number=application_number,
+                instruction=request.instruction,
+                output=generated_output,
+            )
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "output": generated_output,
+            "version": stored.get("version", version),
+            "is_draft": stored.get("is_draft", request.is_draft),
+            "id": stored.get("id"),
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.get("/leads/{application_number}/matrix")
+def matrix_list_outputs(application_number: str, limit: int = 50):
+    """
+    Returns the Matrix output history for an application/profile, newest
+    first. Each record is a versioned artifact stored in matrix_outputs --
+    the source lead is never read by this endpoint.
+    """
+    try:
+        lead = _fetch_lead_any_source(application_number)
+
+        if lead is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No lead on record for application_number={application_number!r}",
+            )
+
+        outputs = matrix_engine.fetch_outputs(application_number, limit=limit)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "count": len(outputs),
+            "outputs": outputs,
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.get("/leads/{application_number}/matrix/{version}")
+def matrix_get_output(application_number: str, version: int):
+    """
+    Returns a single Matrix output by version number for an application.
+    """
+    try:
+        lead = _fetch_lead_any_source(application_number)
+
+        if lead is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No lead on record for application_number={application_number!r}",
+            )
+
+        record = matrix_engine.fetch_output_by_version(application_number, version)
+
+        if record is None:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No Matrix output found for application_number={application_number!r} version={version}",
+            )
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "output": record,
         }
 
     except HTTPException:
