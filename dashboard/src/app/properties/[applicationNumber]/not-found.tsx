@@ -13,8 +13,8 @@ export default function LeadNotFound() {
         <span className="h-2.5 w-2.5 rounded-full bg-status-neutral" />
         <h1 className="text-lg font-semibold text-foreground">No lead on record for this application number</h1>
         <p className="text-sm text-foreground-muted">
-          PermitSignal has no canonical lead/opportunity record matching this application number. It may not have
-          been ingested yet, or the number may be incorrect.
+          Provo Administrative Services Finance has no canonical lead/opportunity record matching this application
+          number. It may not have been ingested yet, or the number may be incorrect.
         </p>
         <Link
           href="/properties"

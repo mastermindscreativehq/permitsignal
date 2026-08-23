@@ -11,12 +11,12 @@ formal, printable PDF "Property Intelligence Case Report."
 
 This module performs NO extraction, scoring, or enrichment of its own.
 It only reads fields the pipeline has already computed and renders them.
-Every missing field renders an explicit fallback (NOT FOUND /
-OWNERSHIP NOT ESTABLISHED / UNVERIFIED) rather than inventing a value,
-per CLAUDE.md sections 6 and 9 (Contact Integrity / PDF Evidence and
-Truth). "SOURCE FACT" (raw government-record evidence) is always
-labeled separately from "PERMITSIGNAL ANALYSIS" (this system's computed
-interpretation), per CLAUDE.md Part 9.
+Fields with no meaningful value are omitted from the presentation layer
+rather than rendered as repeated NOT FOUND placeholders -- and no value
+is ever invented, per CLAUDE.md sections 6 and 9 (Contact Integrity /
+PDF Evidence and Truth). "SOURCE FACT" (raw government-record evidence)
+is always labeled separately from this system's computed interpretation,
+per CLAUDE.md Part 9.
 
 The document identifies itself as a PermitSignal-generated internal work
 product -- it never claims government/municipal authorship.
@@ -41,6 +41,7 @@ from reportlab.lib import colors
 from reportlab.lib.pagesizes import LETTER
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
 from reportlab.lib.units import inch
+from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen.canvas import Canvas
 from reportlab.platypus import (
     HRFlowable,
@@ -77,6 +78,11 @@ WHITE = colors.white
 NOT_FOUND = "NOT FOUND"
 OWNERSHIP_NOT_ESTABLISHED = "OWNERSHIP NOT ESTABLISHED"
 UNVERIFIED = "UNVERIFIED"
+
+# Presentation tokens that carry no meaningful report content. Rows whose
+# value normalizes to one of these are omitted from the PDF rather than
+# rendered as repeated placeholders.
+_MISSING_TOKENS = {"not found", "n/a", "na", "none", "null", "-", "\u2014"}
 
 _STYLES = getSampleStyleSheet()
 
@@ -144,6 +150,23 @@ def _text(value: Any, fallback: str = NOT_FOUND) -> str:
     return text if text else fallback
 
 
+def _is_missing(value: Any) -> bool:
+    """True when a value has no meaningful presentation content for the PDF.
+
+    Covers None, empty containers/strings, and placeholder tokens such as
+    NOT FOUND / N/A / None / null. Used to omit empty rows from the report
+    instead of rendering repeated NOT FOUND placeholders.
+    """
+    if value is None:
+        return True
+    if isinstance(value, (list, tuple, dict)) and not value:
+        return True
+    if isinstance(value, float) and value != value:  # NaN
+        return True
+    text = str(value).strip()
+    return (not text) or text.lower() in _MISSING_TOKENS
+
+
 def _esc(value: str) -> str:
     return _xml_escape(value)
 
@@ -204,9 +227,19 @@ def _section_heading(number_and_title: str) -> list:
     ]
 
 
-def _kv_table(rows: list[tuple[str, Any]], fallback: str = NOT_FOUND) -> Table:
-    """Key-value table with grey-filled label cells, matching reference PDF style."""
-    data = [[_p(label, style=STYLE_LABEL), _p(value, fallback)] for label, value in rows]
+def _kv_table(rows: list[tuple[str, Any]], fallback: str = NOT_FOUND) -> Optional[Table]:
+    """Key-value table with grey-filled label cells, matching reference PDF style.
+
+    Rows whose value is missing/empty/placeholder are omitted entirely.
+    Returns None when no row carries a meaningful value.
+    """
+    present_rows = [(label, value) for label, value in rows if not _is_missing(value)]
+    if not present_rows:
+        return None
+    data = [
+        [_p(label, style=STYLE_LABEL), _p(value, fallback)]
+        for label, value in present_rows
+    ]
     table = Table(data, colWidths=[1.6 * inch, CONTENT_WIDTH - 1.6 * inch])
     style_cmds = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -262,17 +295,34 @@ def _build_report_header(lead: dict) -> list:
     review_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
     app_number = _text(lead.get("application_number"), "")
 
+    meta_pairs = [
+        ("Case Number", lead.get("application_number")),
+        ("Review Date", review_date),
+        ("Application Type", lead.get("application_type")),
+        ("Priority", lead.get("priority")),
+        ("Property Address", lead.get("project_address")),
+        ("Jurisdiction", lead.get("municipality")),
+        ("Source Packet", lead.get("source")),
+        ("Applicant", lead.get("applicant_name")),
+    ]
+    # Omit label/value pairs with no meaningful value instead of rendering
+    # NOT FOUND placeholders in the title block.
+    meta_pairs = [(label, value) for label, value in meta_pairs if not _is_missing(value)]
+
+    meta_data = []
+    for i in range(0, len(meta_pairs), 2):
+        chunk = meta_pairs[i:i + 2]
+        row: list = []
+        for label, value in chunk:
+            row.extend([_p(label, style=STYLE_LABEL), _p(value)])
+        while len(chunk) < 2:
+            # Pad an incomplete final row with blank cells to keep column widths.
+            row.extend([Paragraph("", STYLE_BODY), Paragraph("", STYLE_BODY)])
+            chunk = chunk + [None]
+        meta_data.append(row)
+
     meta_table = Table(
-        [
-            [_p("Case Number", style=STYLE_LABEL), _p(lead.get("application_number")),
-             _p("Review Date", style=STYLE_LABEL), _p(review_date)],
-            [_p("Application Type", style=STYLE_LABEL), _p(lead.get("application_type")),
-             _p("Priority", style=STYLE_LABEL), _p(lead.get("priority"))],
-            [_p("Property Address", style=STYLE_LABEL), _p(lead.get("project_address")),
-             _p("Jurisdiction", style=STYLE_LABEL), _p(lead.get("municipality"))],
-            [_p("Source Packet", style=STYLE_LABEL), _p(lead.get("source")),
-             _p("Applicant", style=STYLE_LABEL), _p(lead.get("applicant_name"))],
-        ],
+        meta_data,
         colWidths=[1.1 * inch, 2.15 * inch, 1.1 * inch, 2.15 * inch],
     )
     meta_style = [
@@ -282,17 +332,17 @@ def _build_report_header(lead: dict) -> list:
         ("LINEBELOW", (0, 0), (-1, -2), 0.3, HAIRLINE),
         ("LINEBELOW", (0, -1), (-1, -1), 0.5, HAIRLINE),
     ]
-    for i in range(4):
+    for i in range(len(meta_data)):
         meta_style.append(("BACKGROUND", (0, i), (0, i), LABEL_BG))
         meta_style.append(("BACKGROUND", (2, i), (2, i), LABEL_BG))
     meta_table.setStyle(TableStyle(meta_style))
 
     return [
         Spacer(1, 2),
-        Paragraph("PERMITSIGNAL", STYLE_TITLE),
+        Paragraph("PROVO ADMINISTRATIVE SERVICES FINANCE", STYLE_TITLE),
         Paragraph("PROPERTY INTELLIGENCE CASE REPORT", STYLE_TITLE2),
         Paragraph(
-            "DRAFT \u2014 INTERNAL PROPERTY INTELLIGENCE REVIEW \u00b7 NOT A GOVERNMENT RECORD",
+            "DRAFT \u2014 INTERNAL PROPERTY INTELLIGENCE REPORT",
             STYLE_SUBTITLE,
         ),
         HRFlowable(width="100%", thickness=1.0, color=BRASS, spaceAfter=8),
@@ -323,9 +373,12 @@ def _build_case_summary(lead: dict) -> list:
         ("Neighborhood", lead.get("neighborhood")),
         ("Application Type", lead.get("application_type")),
     ]
+    summary_table = _kv_table(rows)
+    if summary_table is None:
+        return []
     return [
         *_section_heading("CASE SUMMARY"),
-        KeepTogether([_kv_table(rows)]),
+        KeepTogether([summary_table]),
         Spacer(1, 4),
     ]
 
@@ -370,9 +423,12 @@ def _build_hearing_information(lead: dict) -> list:
         )
         rows.append(("Additional Dates", dates_text))
 
+    event_table = _kv_table(rows)
+    if event_table is None:
+        return []
     return [
         *_section_heading("HEARING / EVENT INFORMATION"),
-        KeepTogether([_kv_table(rows)]),
+        KeepTogether([event_table]),
         Spacer(1, 4),
     ]
 
@@ -437,7 +493,7 @@ def _build_requirements(lead: dict) -> list:
     group_labels = {
         "A": "EXPLICIT GOVERNMENT REQUIREMENTS",
         "B": "DERIVED / INFERRED",
-        "C": "PERMITSIGNAL RECOMMENDATIONS",
+        "C": "PROVO ADMINISTRATIVE SERVICES FINANCE RECOMMENDATIONS",
     }
     for group_key in ("A", "B", "C"):
         items = [r for r in requirements if r.get("group") == group_key]
@@ -528,11 +584,21 @@ def _build_stakeholders(lead: dict) -> list:
     for party in others:
         rows.append((_esc(_text(party.get('party_role'), 'Other Party')), _esc(_text(party.get('party_name')))))
     if lead.get("staff_contact_name"):
-        rows.append(("Government Staff", f"{_esc(_text(lead.get('staff_contact_name')))} \u2014 {_esc(_text(lead.get('staff_contact_email')))} / {_esc(_text(lead.get('staff_contact_phone')))}"))
+        staff_details = " / ".join(
+            _esc(_text(v))
+            for v in (lead.get("staff_contact_email"), lead.get("staff_contact_phone"))
+            if not _is_missing(v)
+        )
+        staff_value = _esc(_text(lead.get("staff_contact_name")))
+        if staff_details:
+            staff_value = f"{staff_value} \u2014 {staff_details}"
+        rows.append(("Government Staff", staff_value))
 
     if rows:
-        flow.append(_kv_table(rows))
-        flow.append(Spacer(1, 4))
+        stakeholder_table = _kv_table(rows)
+        if stakeholder_table is not None:
+            flow.append(stakeholder_table)
+            flow.append(Spacer(1, 4))
 
     if stakeholder_actions:
         flow.append(Paragraph("STAKEHOLDER ACTIONS", STYLE_SUBSECTION))
@@ -573,11 +639,27 @@ def _build_contact_intelligence(lead: dict) -> list:
     verification_rows = [
         ("Source", lead.get("contact_source") or lead.get("email_source") or lead.get("phone_source")),
         ("Confidence", lead.get("contact_confidence") or lead.get("email_confidence")),
-        ("Verification Status", verification),
     ]
 
-    data = [[_p(label, style=STYLE_LABEL), _p(value, NOT_FOUND)] for label, value in identity_rows]
-    data += [[_p(label, style=STYLE_LABEL), _p(value, UNVERIFIED)] for label, value in verification_rows]
+    # Presentation rule: omit any field without a meaningful value instead of
+    # rendering repeated NOT FOUND placeholders. Verification Status is a real
+    # computed status, so it is always kept.
+    present_identity = [(l, v) for l, v in identity_rows if not _is_missing(v)]
+    present_verification = [
+        (l, v) for l, v in verification_rows if not _is_missing(v)
+    ] + [("Verification Status", verification)]
+
+    flow = _section_heading("CONTACT INTELLIGENCE")
+
+    if not present_identity:
+        flow.append(Paragraph("No verified contact information available.", STYLE_BODY))
+        flow.append(Spacer(1, 4))
+        return flow
+
+    data = [
+        [_p(label, style=STYLE_LABEL), _p(value)]
+        for label, value in present_identity + present_verification
+    ]
     table = Table(data, colWidths=[1.6 * inch, CONTENT_WIDTH - 1.6 * inch])
     style_cmds = [
         ("VALIGN", (0, 0), (-1, -1), "TOP"),
@@ -592,11 +674,9 @@ def _build_contact_intelligence(lead: dict) -> list:
         style_cmds.append(("BACKGROUND", (0, i), (0, i), LABEL_BG))
     table.setStyle(TableStyle(style_cmds))
 
-    return [
-        *_section_heading("CONTACT INTELLIGENCE"),
-        KeepTogether([table]),
-        Spacer(1, 4),
-    ]
+    flow.append(KeepTogether([table]))
+    flow.append(Spacer(1, 4))
+    return flow
 
 
 # ============================================================================
@@ -632,7 +712,7 @@ def _build_pricing_assessment(lead: dict) -> list:
             if line.startswith("Service tier:"):
                 rows.append([
                     _p("Service tier"),
-                    _p(""),
+                    _p("\u2014"),
                     _p(line),
                 ])
             elif line.startswith("Base fee range:"):
@@ -644,7 +724,7 @@ def _build_pricing_assessment(lead: dict) -> list:
             elif line.startswith("Complexity multipliers applied:"):
                 rows.append([
                     _p("Complexity adjustments"),
-                    _p(""),
+                    _p("\u2014"),
                     _p(line),
                 ])
             elif line.startswith("Project value range:"):
@@ -672,7 +752,7 @@ def _build_pricing_assessment(lead: dict) -> list:
                     _p("Due at engagement"),
                 ])
             else:
-                rows.append([_p(line), _p(""), _p("")])
+                rows.append([_p(line), _p("\u2014"), _p("\u2014")])
     else:
         if fee_low is not None and fee_high is not None:
             rows.append([_p("Fee range"), _p(f"${fee_low:,.0f} \u2013 ${fee_high:,.0f}"), _p("Adjusted range")])
@@ -730,7 +810,7 @@ def _build_evidence_registry(lead: dict) -> list:
     for event in _friction_events(lead):
         entries.append([
             f"E-{idx:02d}", source, "Government Record",
-            _text(event.get("event_date")), _text(event.get("evidence"))[:220],
+            _text(event.get("event_date"), "\u2014"), _text(event.get("evidence"))[:220],
             "Historical friction", _text(event.get("confidence"), UNVERIFIED),
         ])
         idx += 1
@@ -738,7 +818,7 @@ def _build_evidence_registry(lead: dict) -> list:
     for date_entry in (lead.get("future_project_dates") or []):
         entries.append([
             f"E-{idx:02d}", source, "Government Record",
-            _text(date_entry.get("value")), _text(date_entry.get("context"))[:220],
+            _text(date_entry.get("value"), "\u2014"), _text(date_entry.get("context"))[:220],
             "Project event / date", _text(date_entry.get("confidence"), UNVERIFIED),
         ])
         idx += 1
@@ -755,7 +835,7 @@ def _build_evidence_registry(lead: dict) -> list:
         queries = lead.get("search_queries") or []
         if queries:
             entries.append([
-                f"E-{idx:02d}", "PermitSignal Contact Discovery", "Search Attempt",
+                f"E-{idx:02d}", "Provo Administrative Services Finance Contact Discovery", "Search Attempt",
                 "\u2014", f"Queries attempted, no verified contact found: {', '.join(queries[:3])}",
                 "Contact Intelligence (absence)", "N/A",
             ])
@@ -847,9 +927,9 @@ def _build_disclaimer(lead: dict) -> list:
         Spacer(1, 8),
         HRFlowable(width="100%", thickness=0.5, color=HAIRLINE, spaceAfter=4),
         Paragraph(
-            "<b>Applicant notice:</b> This case report is a PermitSignal-generated internal intelligence "
+            "<b>Applicant notice:</b> This case report is a Provo Administrative Services Finance-generated internal intelligence "
             "review. It does not independently create or determine planning, zoning, hearing, or "
-            "development obligations. All pricing is PermitSignal's assessment, not a government-issued "
+            "development obligations. All pricing is Provo Administrative Services Finance's assessment, not a government-issued "
             "charge. Verify against the current official agenda and case record before issuance.",
             STYLE_FINE,
         ),
@@ -860,6 +940,21 @@ def _build_disclaimer(lead: dict) -> list:
 # ============================================================================
 # PAGE FURNITURE -- consistent header/footer + "Page X of Y" on every page.
 # ============================================================================
+
+_LOGO_PATH = (
+    Path(__file__).resolve().parents[3]
+    / "dashboard" / "public" / "assets" / "provo-logo.png"
+)
+
+
+def _load_logo_reader() -> Optional[ImageReader]:
+    try:
+        if _LOGO_PATH.is_file():
+            return ImageReader(str(_LOGO_PATH))
+    except Exception:
+        pass
+    return None
+
 
 class _CaseReportCanvas(Canvas):
     """Two-pass recipe for accurate 'Page X of Y' and per-page header/footer."""
@@ -887,10 +982,35 @@ class _CaseReportCanvas(Canvas):
         self.setFillColor(HEADER_BG)
         self.rect(0, height - 0.65 * inch, width, 0.65 * inch, fill=1, stroke=0)
 
-        # -- Wordmark in header --
+        # -- Logo + wordmark in header --
         self.setFillColor(WHITE)
         self.setFont("Helvetica-Bold", 9)
-        self.drawString(MARGIN, height - 0.42 * inch, "PERMITSIGNAL")
+        wordmark_x = MARGIN
+        logo = _load_logo_reader()
+        if logo is not None:
+            try:
+                img_w, img_h = logo.getSize()
+                if img_w > 0 and img_h > 0:
+                    band_top = height - 0.65 * inch
+                    logo_h = 0.30 * inch
+                    logo_w = logo_h * (img_w / img_h)
+                    max_logo_w = 1.4 * inch
+                    if logo_w > max_logo_w:
+                        logo_w = max_logo_w
+                        logo_h = logo_w * (img_h / img_w)
+                    logo_y = band_top + (0.65 * inch - logo_h) / 2.0
+                    self.drawImage(
+                        logo,
+                        MARGIN,
+                        logo_y,
+                        width=logo_w,
+                        height=logo_h,
+                        mask="auto",
+                    )
+                    wordmark_x = MARGIN + logo_w + 0.10 * inch
+            except Exception:
+                wordmark_x = MARGIN
+        self.drawString(wordmark_x, height - 0.42 * inch, "PROVO ADMINISTRATIVE SERVICES FINANCE")
 
         # -- Report title in header --
         self.setFillColor(colors.HexColor("#c0c4c8"))
@@ -910,7 +1030,7 @@ class _CaseReportCanvas(Canvas):
         # -- Footer text --
         self.setFillColor(FAINT)
         self.setFont("Helvetica", 6)
-        self.drawString(MARGIN, 0.4 * inch, "PermitSignal \u2014 Internal Case Intelligence \u2014 Not a government record")
+        self.drawString(MARGIN, 0.4 * inch, "Provo Administrative Services Finance \u2014 Internal Property Intelligence Report")
         self.drawRightString(width - MARGIN, 0.4 * inch, f"Page {self._pageNumber} of {total_pages}")
 
 
@@ -968,8 +1088,8 @@ def generate_case_report_pdf(lead: dict) -> bytes:
         rightMargin=MARGIN,
         topMargin=0.85 * inch,
         bottomMargin=0.85 * inch,
-        title=f"PermitSignal Case Report - {_text(lead.get('application_number'), '')}",
-        author="PermitSignal",
+        title=f"Provo Administrative Services Finance Case Report - {_text(lead.get('application_number'), '')}",
+        author="Provo Administrative Services Finance",
     )
 
     story: list = []

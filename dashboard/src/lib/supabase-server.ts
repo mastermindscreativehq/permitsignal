@@ -15,7 +15,7 @@ const SUPABASE_KEY = process.env.SUPABASE_KEY;
 if (!SUPABASE_URL || !SUPABASE_KEY) {
   throw new Error(
     "SUPABASE_URL and SUPABASE_KEY must be set in dashboard/.env.local " +
-      "to load real PermitSignal leads."
+      "to load real Provo Administrative Services Finance leads."
   );
 }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -17,10 +18,16 @@ export function MobileNav() {
   return (
     <div className="flex flex-col gap-2 border-b border-border-subtle bg-background-elevated px-4 py-3 lg:hidden">
       <div className="flex items-center gap-2">
-        <div className="flex h-7 w-7 items-center justify-center rounded-md border border-accent/40 bg-accent-soft">
-          <span className="font-mono text-[10px] font-semibold text-accent-strong">PS</span>
-        </div>
-        <span className="text-sm font-semibold text-foreground">PermitSignal</span>
+        <Image
+          src="/assets/provo-logo.png"
+          alt="Provo Administrative Services Finance logo"
+          width={28}
+          height={28}
+          className="h-7 w-7 shrink-0 object-contain"
+        />
+        <span className="text-[11px] font-semibold text-foreground">
+          PROVO ADMINISTRATIVE SERVICES FINANCE
+        </span>
       </div>
       <nav className="flex items-center gap-4 overflow-x-auto">
         {NAV_ITEMS.map((item) => {

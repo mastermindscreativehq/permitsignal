@@ -27,7 +27,7 @@ async function apiGet<T>(path: string): Promise<T | null> {
     response = await fetch(`${PERMITSIGNAL_API_URL}${path}`, { cache: "no-store" });
   } catch (cause) {
     throw new PermitSignalApiError(
-      `Could not reach the PermitSignal API at ${PERMITSIGNAL_API_URL}. Is the backend running?`,
+      `Could not reach the Provo Administrative Services Finance API at ${PERMITSIGNAL_API_URL}. Is the backend running?`,
       { cause }
     );
   }
@@ -44,14 +44,17 @@ async function apiGet<T>(path: string): Promise<T | null> {
       // Non-JSON error body -- fall through with an empty detail.
     }
     throw new PermitSignalApiError(
-      `PermitSignal API returned ${response.status} for ${path}${detail ? `: ${detail}` : ""}.`
+      `Provo Administrative Services Finance API returned ${response.status} for ${path}${detail ? `: ${detail}` : ""}.`
     );
   }
 
   try {
     return (await response.json()) as T;
   } catch (cause) {
-    throw new PermitSignalApiError(`PermitSignal API returned malformed JSON for ${path}.`, { cause });
+    throw new PermitSignalApiError(
+      `Provo Administrative Services Finance API returned malformed JSON for ${path}.`,
+      { cause }
+    );
   }
 }
 
@@ -70,7 +73,9 @@ export async function getLeads(): Promise<Lead[]> {
   }
 
   if (!Array.isArray(payload.leads)) {
-    throw new PermitSignalApiError("PermitSignal API /leads response did not contain a leads array.");
+    throw new PermitSignalApiError(
+      "Provo Administrative Services Finance API /leads response did not contain a leads array."
+    );
   }
 
   return payload.leads as Lead[];
@@ -85,7 +90,7 @@ export async function getLeadByApplicationNumber(applicationNumber: string): Pro
 
   if (payload.lead === null || typeof payload.lead !== "object") {
     throw new PermitSignalApiError(
-      `PermitSignal API /leads/${applicationNumber} response did not contain a lead object.`
+      `Provo Administrative Services Finance API /leads/${applicationNumber} response did not contain a lead object.`
     );
   }
 

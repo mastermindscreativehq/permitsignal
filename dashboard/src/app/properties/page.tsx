@@ -58,7 +58,7 @@ export default async function PropertyIntelligencePage({
         <div className="panel p-10 text-center">
           <p className="text-sm font-medium text-foreground">No opportunities on record</p>
           <p className="mt-1 text-xs text-foreground-faint">
-            The PermitSignal API returned zero leads. Run the pipeline against a government packet to populate the queue.
+            The Provo Administrative Services Finance API returned zero leads. Run the pipeline against a government packet to populate the queue.
           </p>
         </div>
       ) : (

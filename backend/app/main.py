@@ -15,7 +15,7 @@ from backend.app.services import investigation_engine
 
 
 app = FastAPI(
-    title="PermitSignal API",
+    title="PROVO ADMINISTRATIVE SERVICES FINANCE API",
     description="Government approval intelligence platform",
     version="1.0.0",
 )
@@ -49,7 +49,7 @@ app.add_middleware(
 @app.get("/")
 def root():
     return {
-        "service": "PermitSignal",
+        "service": "Provo Administrative Services Finance",
         "status": "online",
         "version": "1.0.0",
     }
@@ -281,7 +281,7 @@ def get_case_report_pdf(application_number: str):
             content=pdf_bytes,
             media_type="application/pdf",
             headers={
-                "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}.pdf"',
+                "Content-Disposition": f'inline; filename="provo_administrative_services_finance_case_report_{application_number}.pdf"',
             },
         )
 
@@ -432,7 +432,7 @@ def get_case_report_pdf_version(application_number: str, version: int):
                         content=pdf_bytes,
                         media_type="application/pdf",
                         headers={
-                            "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}_v{version}.pdf"',
+                            "Content-Disposition": f'inline; filename="provo_administrative_services_finance_case_report_{application_number}_v{version}.pdf"',
                         },
                     )
 
@@ -449,7 +449,7 @@ def get_case_report_pdf_version(application_number: str, version: int):
                 content=pdf_bytes,
                 media_type="application/pdf",
                 headers={
-                    "Content-Disposition": f'inline; filename="permitsignal_case_report_{application_number}.pdf"',
+                            "Content-Disposition": f'inline; filename="provo_administrative_services_finance_case_report_{application_number}.pdf"',
                 },
             )
 
@@ -1033,6 +1033,146 @@ def enrich_lead(application_number: str):
         raise HTTPException(status_code=500, detail=str(exc))
 
 
+# ---------------------------------------------------------------------------
+# Entity Intelligence (deep case research)
+#
+# Bounded iterative public-web research over one case's entities:
+# CASE -> PROPERTY -> OWNER -> APPLICANT -> AGENT -> PEOPLE ->
+# ORGANIZATIONS -> ENTITY RESOLUTION -> RELATIONSHIPS -> EVIDENCE ->
+# ENRICHED CASE INTELLIGENCE. Entirely additive to the lead record; the
+# result is stored under lead["case_intelligence"] and, when Supabase
+# tables from migration 0008 exist, mirrored into normalized rows.
+# ---------------------------------------------------------------------------
+
+class CaseResearchRequest(BaseModel):
+    max_depth: int = 2
+    max_queries: int = 30
+    max_pages: int = 10
+    persist_entities: bool = True
+
+
+def _build_seed_only_case_intelligence(lead: dict):
+    """
+    Deterministic, network-free enriched case record built purely from
+    the government-record seed graph (used when no research has run yet).
+    """
+    from backend.app.services.case_research_engine import CaseResearchEngine
+
+    engine = CaseResearchEngine(
+        lead,
+        serpapi_key=None,
+        max_queries=0,
+        max_pages=0,
+        max_depth=0,
+    )
+    return engine.run()
+
+
+@app.post("/leads/{application_number}/intelligence/research")
+def research_case_intelligence(application_number: str, request: CaseResearchRequest):
+    """
+    Run bounded deep research for one case: seeds entities from the
+    government record, searches the public web per source-hierarchy
+    priority, resolves identities with multi-signal matching, records
+    claim-level evidence, and stores the additive case_intelligence
+    record on the lead (persisted like other investigation state).
+    """
+    try:
+        from backend.app.services.case_research_engine import run_case_research
+
+        lead = _get_investigation_lead_or_404(application_number)
+
+        record = run_case_research(
+            lead,
+            persist=request.persist_entities,
+            max_depth=max(0, min(request.max_depth, 3)),
+            max_queries=max(0, min(request.max_queries, 60)),
+            max_pages=max(0, min(request.max_pages, 20)),
+        )
+
+        _persist_investigation_lead(lead)
+
+        stats = record.get("stats", {})
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "research_run": record.get("research_run", {}),
+            "stats": stats,
+            "entities": [
+                {
+                    "entity_key": e.get("entity_key"),
+                    "entity_type": e.get("entity_type"),
+                    "canonical_name": e.get("canonical_name"),
+                    "match_status": e.get("match_status"),
+                    "match_confidence": e.get("match_confidence"),
+                }
+                for e in record.get("entities", [])
+            ],
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/leads/{application_number}/intelligence/entities")
+def get_case_entities(application_number: str):
+    """Entity/evidence/match view of one case's stored intelligence."""
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        stored = lead.get("case_intelligence")
+
+        if not isinstance(stored, dict) or not stored.get("entities"):
+            stored = _build_seed_only_case_intelligence(lead)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "product": stored.get("product"),
+            "entities": stored.get("entities", []),
+            "relationships": stored.get("relationships", []),
+            "evidence": stored.get("evidence", []),
+            "sources": stored.get("sources", []),
+            "research_run": stored.get("research_run", {}),
+            "stats": stored.get("stats", {}),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/leads/{application_number}/intelligence/enriched-case")
+def get_enriched_case(application_number: str):
+    """
+    Consumer-ready enriched case intelligence record (the structure a
+    future PDF/dashboard consumes): case, property, people,
+    organizations, relationships, contact claims, evidence with source
+    hierarchy ranks, confidence, and research status. Falls back to the
+    deterministic government-record seed record when no live research
+    has been run yet.
+    """
+    try:
+        lead = _get_investigation_lead_or_404(application_number)
+        stored = lead.get("case_intelligence")
+
+        if not isinstance(stored, dict) or not stored.get("entities"):
+            stored = _build_seed_only_case_intelligence(lead)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "case_intelligence": stored,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 def _parse_reference_date(value: Optional[str]) -> Optional[date]:
     """
     pipeline_orchestrator.run_pipeline() requires reference_date as a
@@ -1111,19 +1251,27 @@ def pipeline_ingest(request: PipelineIngestRequest):
 # ---------------------------------------------------------------------------
 
 class MatrixGenerateRequest(BaseModel):
-    instruction: str
+    instruction: Optional[str] = None
     is_draft: bool = False
     previous_version: Optional[int] = None
+    messages: Optional[list[dict[str, str]]] = None
 
 
 @app.post("/leads/{application_number}/matrix")
 def matrix_generate(application_number: str, request: MatrixGenerateRequest):
     """
     Profile Matrix generation boundary: executes a Matrix instruction against
-    an existing lead profile. Reads the lead (read-only), builds profile
-    context, calls the configured LLM, stores the output as a versioned
-    artifact in matrix_outputs, and returns it. The source lead record is
-    NEVER mutated.
+    an existing lead profile.
+
+    Supports two modes:
+      - Chat mode (messages provided): full conversational interaction with
+        context filtering, conversation history, and task-aware responses.
+      - Legacy mode (instruction provided): single-instruction generation
+        with full profile context.
+
+    Reads the lead (read-only), builds profile context, calls the configured
+    LLM, stores the output as a versioned artifact in matrix_outputs, and
+    returns it. The source lead record is NEVER mutated.
     """
     try:
         lead = _fetch_lead_any_source(application_number)

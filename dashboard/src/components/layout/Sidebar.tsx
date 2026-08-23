@@ -1,5 +1,6 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
@@ -56,11 +57,17 @@ export function Sidebar() {
   return (
     <aside className="hidden w-[236px] shrink-0 flex-col border-r border-border-subtle bg-background-elevated px-4 py-6 lg:flex">
       <div className="mb-8 flex items-center gap-2.5 px-2">
-        <div className="flex h-8 w-8 items-center justify-center rounded-md border border-accent/40 bg-accent-soft">
-          <span className="font-mono text-xs font-semibold text-accent-strong">PS</span>
-        </div>
+        <Image
+          src="/assets/provo-logo.png"
+          alt="Provo Administrative Services Finance logo"
+          width={32}
+          height={32}
+          className="h-8 w-8 shrink-0 object-contain"
+        />
         <div>
-          <p className="text-sm font-semibold leading-tight text-foreground">PermitSignal</p>
+          <p className="text-[11px] font-semibold leading-tight text-foreground">
+            PROVO ADMINISTRATIVE SERVICES FINANCE
+          </p>
           <p className="text-[11px] leading-tight text-foreground-faint">Commercial Intelligence</p>
         </div>
       </div>
@@ -103,7 +110,7 @@ export function Sidebar() {
             <p className="text-xs font-medium text-foreground">Live data</p>
           </div>
           <p className="mt-1 text-[11px] leading-snug text-foreground-faint">
-            Live via PermitSignal API
+            Live via Provo Administrative Services Finance API
           </p>
         </div>
       </div>

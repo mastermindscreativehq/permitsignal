@@ -19,9 +19,9 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
     <div className="flex min-h-[60vh] flex-col items-center justify-center gap-4 text-center">
       <div className="panel flex max-w-lg flex-col items-center gap-3 p-8">
         <span className="h-2.5 w-2.5 rounded-full bg-status-negative" />
-        <h1 className="text-lg font-semibold text-foreground">Unable to load PermitSignal intelligence</h1>
+        <h1 className="text-lg font-semibold text-foreground">Unable to load intelligence</h1>
         <p className="text-sm text-foreground-muted">
-          {error.message || "The PermitSignal API did not return a usable response."}
+          {error.message || "The Provo Administrative Services Finance API did not return a usable response."}
         </p>
         <p className="text-xs text-foreground-faint">
           This is a connectivity/response problem, not missing data -- no intelligence has been fabricated to fill

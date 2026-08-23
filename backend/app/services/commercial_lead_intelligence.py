@@ -297,8 +297,8 @@ def recommend_commercial_action(
         return (
             ACTION_MONITOR,
             "A future project date is on record, but this application "
-            "does not yet meet PermitSignal's priority/actionability bar "
-            "for a qualified commercial lead.",
+            "does not yet meet Provo Administrative Services Finance's "
+            "priority/actionability bar for a qualified commercial lead.",
         )
 
     owner_name = _text(opportunity.get("owner_name")) or _text(
@@ -321,9 +321,9 @@ def recommend_commercial_action(
 
         return (
             ACTION_ENRICH_CONTACT,
-            "This application meets PermitSignal's lead-qualification "
-            "bar, but no public applicant, owner, or company contact has "
-            "been found yet.",
+            "This application meets Provo Administrative Services Finance's "
+            "lead-qualification bar, but no public applicant, owner, or "
+            "company contact has been found yet.",
         )
 
     # readiness == READINESS_READY_FOR_OUTREACH
@@ -337,8 +337,8 @@ def recommend_commercial_action(
         return (
             ACTION_FOLLOW_UP_APPROVAL,
             _text(opportunity.get("approval_reason"))
-            or f"PermitSignal identified a next approval action: "
-            f"{approval_action}.",
+            or f"Provo Administrative Services Finance identified a next "
+            f"approval action: {approval_action}.",
         )
 
     if owner_name and contactability in (

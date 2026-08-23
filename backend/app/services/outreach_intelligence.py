@@ -472,24 +472,24 @@ def build_outreach_message(
     situation = (
         _text(opportunity.get("approval_reason"))
         or _text(opportunity.get("opportunity_reason"))
-        or "PermitSignal is tracking activity on this application."
+        or "Provo Administrative Services Finance is tracking activity on this application."
     )
 
     action = _text(opportunity.get("recommended_commercial_action"))
     action_reason = _text(opportunity.get("commercial_action_reason"))
 
-    subject = f"PermitSignal: {application_type} {application_number}{location}".strip()
+    subject = f"Provo Administrative Services Finance: {application_type} {application_number}{location}".strip()
 
     body_lines = [
         f"Hi {name},",
         "",
-        f"PermitSignal is tracking application {application_number} "
+        f"Provo Administrative Services Finance is tracking application {application_number} "
         f"({application_type}){location}{jurisdiction}.",
         situation,
     ]
 
     if action and action != "hold -- insufficient evidence":
-        action_line = f"Based on this record, PermitSignal recommends: {action}."
+        action_line = f"Based on this record, Provo Administrative Services Finance recommends: {action}."
 
         if action_reason and action_reason != situation:
             action_line += f" {action_reason}"
@@ -499,13 +499,13 @@ def build_outreach_message(
     body_lines.extend(
         [
             "",
-            "We'd like to share the full intelligence PermitSignal has "
+            "We'd like to share the full intelligence Provo Administrative Services Finance has "
             "compiled on this project and discuss whether it would be "
             "useful to you.",
             "",
             "Would you be open to a brief conversation?",
             "",
-            "-- PermitSignal",
+            "-- Provo Administrative Services Finance",
         ]
     )
 

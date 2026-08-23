@@ -17,7 +17,7 @@ async function apiPost<T>(path: string, body?: Record<string, unknown>): Promise
     });
   } catch {
     throw new Error(
-      `Could not reach the PermitSignal API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
+      `Could not reach the Provo Administrative Services Finance API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
     );
   }
 
@@ -41,7 +41,7 @@ async function apiGet<T>(path: string): Promise<T> {
     response = await fetch(`${PERMITSIGNAL_API_URL}${path}`, { cache: "no-store" });
   } catch {
     throw new Error(
-      `Could not reach the PermitSignal API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
+      `Could not reach the Provo Administrative Services Finance API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
     );
   }
 

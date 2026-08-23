@@ -7,7 +7,7 @@ import { Field } from "./Field";
 const READINESS_COPY: Record<string, string> = {
   READY_FOR_OUTREACH: "This lead qualifies as a real opportunity and has usable public contact evidence -- ready for outreach.",
   NEEDS_CONTACT_ENRICHMENT: "This lead qualifies as a real opportunity, but no public contact has been verified yet.",
-  NEEDS_MORE_PROJECT_EVIDENCE: "A future project event exists, but this application has not yet met PermitSignal's bar for a qualified commercial lead.",
+  NEEDS_MORE_PROJECT_EVIDENCE: "A future project event exists, but this application has not yet met Provo Administrative Services Finance's bar for a qualified commercial lead.",
   NOT_READY: "No live project event is currently on record -- there is no active opportunity to act on yet.",
 };
 

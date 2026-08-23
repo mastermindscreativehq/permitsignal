@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "PermitSignal — Commercial Intelligence Platform",
+  title: "PROVO ADMINISTRATIVE SERVICES FINANCE",
   description:
     "Government-project intelligence from planning packets: applicant/owner/company identification, friction history, upcoming events, opportunity scoring, and verified public contact intelligence.",
 };

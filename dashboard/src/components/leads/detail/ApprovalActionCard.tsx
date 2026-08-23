@@ -6,7 +6,7 @@ import { Field } from "./Field";
 
 const BASIS_COPY: Record<string, string> = {
   confirmed_requirement: "Confirmed by explicit government-record evidence (a denial/withdrawal outcome, or a scheduled hearing with explicit hearing-class evidence).",
-  evidence_backed_recommendation: "A real signal exists in the record, but the specific recommended action is PermitSignal's own synthesis on top of it.",
+  evidence_backed_recommendation: "A real signal exists in the record, but the specific recommended action is Provo Administrative Services Finance's own synthesis on top of it.",
   inferred_next_step: "Only weak/indirect evidence exists -- treat this as a hint, not a confirmed requirement.",
   unknown: "Insufficient evidence to recommend an action -- never guessed.",
 };
@@ -24,7 +24,7 @@ export function ApprovalActionCard({ lead }: { lead: Lead }) {
   return (
     <SectionCard
       title="Approval-Action Intelligence"
-      description="What PermitSignal believes needs to happen next to move this application toward approval, and why."
+      description="What Provo Administrative Services Finance believes needs to happen next to move this application toward approval, and why."
       actions={
         hasApprovalIntelligence ? (
           <Badge variant={approvalStatusVariant(lead.approval_status)}>{titleCase(lead.approval_status)}</Badge>

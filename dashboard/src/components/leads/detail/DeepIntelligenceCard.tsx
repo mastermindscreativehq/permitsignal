@@ -16,7 +16,7 @@ function TrustBadge({ classification }: { classification?: string }) {
   const c = classification.toUpperCase();
   if (c === "FACT") return <Badge variant="status-positive">VERIFIED GOVERNMENT EVIDENCE</Badge>;
   if (c === "INFERENCE") return <Badge variant="status-caution">DERIVED / INFERRED</Badge>;
-  if (c === "RECOMMENDATION") return <Badge variant="priority-medium">PERMITSIGNAL RECOMMENDATION</Badge>;
+  if (c === "RECOMMENDATION") return <Badge variant="priority-medium">PASF RECOMMENDATION</Badge>;
   return <Badge variant="status-neutral">NOT VERIFIED</Badge>;
 }
 
@@ -167,7 +167,7 @@ function RequirementsList({ requirements }: { requirements: Intel["requirements"
   const groups = [
     { key: "A", label: "Explicit Government Requirements", variant: "status-positive" as const },
     { key: "B", label: "Derived / Inferred", variant: "status-caution" as const },
-    { key: "C", label: "PermitSignal Recommendations", variant: "priority-medium" as const },
+    { key: "C", label: "Provo Administrative Services Finance Recommendations", variant: "priority-medium" as const },
   ];
 
   return (

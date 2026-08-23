@@ -116,7 +116,7 @@ export function EvidenceView({ lead }: { lead: Lead }) {
 
       <SectionCard
         title="Approval-Action Evidence"
-        description="The government-record or scheduling evidence PermitSignal's approval-action recommendation is derived from."
+        description="The government-record or scheduling evidence Provo Administrative Services Finance's approval-action recommendation is derived from."
       >
         {lead.approval_status ? (
           <div className="flex flex-col gap-3">
