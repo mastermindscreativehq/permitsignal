@@ -45,6 +45,7 @@ ECONOMIC_INTELLIGENCE_MODULE = "backend.app.services.economic_intelligence"
 COMMERCIAL_INTELLIGENCE_MODULE = "backend.app.services.commercial_lead_intelligence"
 OUTREACH_INTELLIGENCE_MODULE = "backend.app.services.outreach_intelligence"
 APPROVAL_INTELLIGENCE_ENGINE_MODULE = "backend.app.services.approval_intelligence_engine"
+ACTION_STAGE_INTELLIGENCE_MODULE = "backend.app.services.approval_stage_intelligence"
 PRICING_ENGINE_MODULE = "backend.app.services.pricing_engine"
 LEAD_REPOSITORY_MODULE = "backend.app.services.lead_repository"
 
@@ -1016,6 +1017,60 @@ def _apply_approval_intelligence_engine(
     return results
 
 
+def _apply_action_intelligence(
+    opportunities: list[dict[str, Any]],
+    reference_date: date,
+) -> list[dict[str, Any]]:
+    """
+    Attach the frozen Action Intelligence package (contract v1.0) to each
+    opportunity: requested_action, conditions, decision_stage, blockers
+    and mapped actions -- all evidence-first, computed only from data
+    already present on the record.
+
+    Purely additive: only the action_intelligence key is added; every
+    existing field is preserved unchanged.
+    """
+    module = _import_service(ACTION_STAGE_INTELLIGENCE_MODULE)
+
+    requested_fn = _first_callable(module, "build_requested_action")
+    conditions_fn = _first_callable(module, "build_conditions")
+    stage_fn = _first_callable(module, "build_decision_stage")
+    blockers_fn = _first_callable(module, "map_blockers_and_actions")
+
+    if None in (requested_fn, conditions_fn, stage_fn, blockers_fn):
+        return opportunities
+
+    contract_version = getattr(module, "CONTRACT_VERSION", "1.0")
+
+    results: list[dict[str, Any]] = []
+
+    for opportunity in opportunities:
+        item = dict(opportunity)
+
+        try:
+            package = {
+                "contract_version": contract_version,
+                "requested_action": requested_fn(item),
+                "conditions": conditions_fn(item),
+                "decision_stage": stage_fn(
+                    item, reference_date=reference_date.isoformat()
+                ),
+                "blockers_and_actions": blockers_fn(
+                    item, reference_date=reference_date.isoformat()
+                ),
+            }
+            item["action_intelligence"] = package
+        except Exception as exc:
+            item["action_intelligence"] = {
+                "status": "error",
+                "error": str(exc),
+            }
+
+        results.append(item)
+
+    return results
+
+
 # ============================================================================
 # PRICING ENGINE
 # ============================================================================
@@ -1507,6 +1562,14 @@ def run_pipeline(
         print("[8/10] Running deep approval intelligence engine...")
 
     completed_opportunities = _apply_approval_intelligence_engine(
+        completed_opportunities,
+        reference_date,
+    )
+
+    if verbose:
+        print("[8/10] Attaching Action Intelligence package...")
+
+    completed_opportunities = _apply_action_intelligence(
         completed_opportunities,
         reference_date,
     )
