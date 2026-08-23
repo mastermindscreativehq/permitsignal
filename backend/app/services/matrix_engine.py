@@ -3,13 +3,15 @@ PermitSignal Profile Matrix Engine
 
 Purpose
 -------
-The Matrix Engine is the intelligence layer that generates content for
-individual applicant/profile contexts. It:
+The Matrix Engine is the conversational intelligence layer that generates
+content for individual applicant/profile contexts. It:
 
 1. Builds a structured profile context from an existing lead record.
-2. Sends the context + user instruction to an LLM provider.
-3. Returns the generated output WITHOUT mutating the source lead.
-4. Stores generated outputs as versioned artifacts in Supabase.
+2. Detects the user's intent and retrieves only relevant context.
+3. Supports multi-turn conversation history.
+4. Sends context + conversation + instruction to an LLM provider.
+5. Returns the generated output WITHOUT mutating the source lead.
+6. Stores generated outputs as versioned artifacts in Supabase.
 
 Architecture Principle
 ----------------------
@@ -38,28 +40,38 @@ import json
 import logging
 import os
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Any, Optional
 
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(Path(__file__).resolve().parents[3] / ".env")
 
 logger = logging.getLogger(__name__)
 
 # ---------------------------------------------------------------------------
-# Matrix system prompt
+# Matrix system prompt (conversational)
 # ---------------------------------------------------------------------------
 
 MATRIX_SYSTEM_PROMPT = """\
-You are PROFILE MATRIX — the private intelligence, reasoning, writing, and
-creative-generation engine attached to ONE specific applicant/profile.
+You are PROFILE MATRIX — a conversational intelligence assistant attached to
+ONE specific applicant/profile within the PermitSignal government planning and
+permit intelligence system.
 
-You operate within the PermitSignal government planning/permit intelligence
-system. Your job is to understand the complete profile context supplied and
-then execute the user's instruction with exceptional intelligence, precision,
-contextual awareness, professional writing ability, and natural human reasoning.
+You have access to the complete profile context for this applicant. You use
+it as needed to fulfill the user's requests. You are NOT a report generator.
+You are a conversational assistant that follows instructions precisely.
 
 CORE RULES:
+- Follow the user's instruction exactly. Do what they ask, nothing more.
+- If they ask for an email, write an email. Nothing else.
+- If they ask for a summary, write a summary. Nothing else.
+- If they ask a question, answer it directly. Nothing else.
+- If they ask for a table, return a table. Nothing else.
+- Never append unsolicited sections, intelligence dumps, or extra analysis.
+- Never add "Case Intelligence", "Application Information", "Next Steps",
+  "Supporting Intelligence", "Evidence", "Opportunity Analysis", "Pricing",
+  "Sources", or any other section unless the user explicitly requested it.
 - Use ONLY the supplied profile context. Do not invent missing source data.
 - If a field is unavailable, acknowledge it rather than fabricating a value.
 - Never confuse information belonging to another profile.
@@ -68,13 +80,42 @@ CORE RULES:
 - Write like an exceptionally capable senior professional.
 - Be intelligent, persuasive, natural, clear, authoritative, and specific.
 - Every sentence should have a purpose.
-- Do not add content the user did not request.
-- Do not explain your reasoning unless asked.
+
+CONTEXT USAGE:
+- Profile intelligence is your context, not your output format.
+- Retrieve only the information needed for the current request.
+- The user's instruction determines what you produce.
+- If the user asks about the applicant, use applicant data.
+- If the user asks about pricing, use pricing data.
+- If the user asks about friction, use friction data.
+- Do not inject data the user did not ask about.
 
 OUTPUT FORMAT:
-Return your generated content directly. Do not wrap it in markdown fences.
-Do not add preamble like "Here is the generated content:".
-Just produce the requested output.
+- Return ONLY what the user requested.
+- If they asked for an email, the response IS the email.
+- If they asked for a paragraph, the response IS the paragraph.
+- If they asked for a list, the response IS the list.
+- Do not wrap output in markdown fences unless the user asked for code.
+- Do not add preamble like "Here is the generated content:".
+- Do not add postscript like "Let me know if you need anything else."
+- Just produce the requested output.
+
+CONVERSATION:
+- Maintain context from earlier in the conversation.
+- If the user says "make it shorter", modify the previous response.
+- If the user says "more professional", adjust the tone.
+- If the user says "give me options", provide alternatives.
+- Build on previous exchanges naturally.
+
+SAFETY:
+- PermitSignal-generated simulations must not be represented as actual
+  government-issued communications, payment instructions, invoices,
+  approvals, or official records.
+- Fictional scenarios and communications must be clearly fictional.
+- Never present fictional payment information as real.
+- Do not pollute ordinary responses with unnecessary safety warnings.
+- Apply safety boundaries only when generating fictional government
+  communications or payment-related content.
 """
 
 # ---------------------------------------------------------------------------
@@ -250,7 +291,7 @@ _SOURCE_FIELDS = [
     "state",
 ]
 
-_FIELD_GROUPS = [
+_FIELD_GROUPS: list[tuple[str, list[str]]] = [
     ("Applicant", _APPLICANT_FIELDS),
     ("Organisation", _ORGANISATION_FIELDS),
     ("Case / Application", _CASE_FIELDS),
@@ -273,12 +314,152 @@ _FIELD_GROUPS = [
     ("Source", _SOURCE_FIELDS),
 ]
 
+# ---------------------------------------------------------------------------
+# Context relevance filtering
+# ---------------------------------------------------------------------------
+
+# Maps task keywords to the field group names that are most relevant.
+_TASK_CONTEXT_MAP: dict[tuple[str, ...], list[str]] = {
+    ("email", "mail", "outreach", "message", "contact", "write", "draft"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Government Staff", "Contact Intelligence", "Outreach",
+        "Timing / Events", "Source",
+    ],
+    ("summary", "summarize", "overview", "brief", "recap"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Timing / Events", "Opportunity", "Source",
+    ],
+    ("question", "who", "what", "when", "where", "how", "tell me",
+     "explain", "describe", "about"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Property Owner", "Government Staff", "Contact Intelligence",
+        "Timing / Events", "Opportunity", "Source",
+    ],
+    ("price", "pricing", "cost", "fee", "charge", "spend", "budget",
+     "payment", "value", "economic", "financial"): [
+        "Applicant", "Case / Application", "Pricing",
+        "Economic Intelligence", "Property",
+    ],
+    ("friction", "conflict", "issue", "problem", "denial", "denied",
+     "opposition", "objection", "history"): [
+        "Applicant", "Case / Application", "Friction / History",
+        "Property", "Property Owner", "Source",
+    ],
+    ("approval", "approved", "approve", "decision", "ruling", "vote",
+     "hearing", "permit"): [
+        "Applicant", "Case / Application", "Approval Action",
+        "Timing / Events", "Government Staff", "Source",
+    ],
+    ("opportunity", "lead", "priority", "score", "urgent", "actionable",
+     "timeline"): [
+        "Applicant", "Case / Application", "Opportunity",
+        "Timing / Events", "Commercial Intelligence", "Source",
+    ],
+    ("scenario", "fictional", "simulate", "roleplay", "creative",
+     "story", "creative"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Property Owner", "Contact Intelligence", "Timing / Events",
+    ],
+    ("table", "list", "bullet", "format", "structure", "json",
+     "organize"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Timing / Events", "Opportunity", "Source",
+    ],
+    ("investigation", "investigate", "research", "deep dive", "profile",
+     "background"): [
+        "Applicant", "Organisation", "Case / Application", "Property",
+        "Property Owner", "Contact Intelligence", "Investigation",
+        "Deep Intelligence", "Source",
+    ],
+    ("commercial", "business", "sales", "outreach strategy",
+     "qualification", "lead qualification"): [
+        "Applicant", "Organisation", "Commercial Intelligence",
+        "Contact Intelligence", "Opportunity", "Outreach", "Source",
+    ],
+    ("everything", "all", "full", "complete", "entire", "comprehensive"): [
+        gname for gname, _ in _FIELD_GROUPS
+    ],
+}
+
+# Always include these groups regardless of task — they provide essential
+# grounding context for any request.
+_ALWAYS_INCLUDE: list[str] = [
+    "Applicant",
+    "Case / Application",
+    "Property",
+]
+
+
+def _detect_relevant_groups(instruction: str) -> list[str]:
+    """
+    Analyse the user instruction and return the field group names
+    that are relevant to the requested task. Always includes the
+    core applicant/case/property groups for grounding.
+    """
+    lower = instruction.lower()
+    relevant: set[str] = set(_ALWAYS_INCLUDE)
+
+    for keywords, groups in _TASK_CONTEXT_MAP.items():
+        for kw in keywords:
+            if kw in lower:
+                relevant.update(groups)
+                break
+
+    return list(relevant)
+
+
+def build_filtered_context(lead: dict[str, Any], instruction: str) -> str:
+    """
+    Build a structured text representation of the lead record,
+    filtered to only include groups relevant to the user's instruction.
+    Only includes fields with non-None values. Never mutates the lead dict.
+    """
+    relevant_groups = _detect_relevant_groups(instruction)
+
+    lines: list[str] = []
+    lines.append("=" * 60)
+    lines.append("PROFILE CONTEXT")
+    lines.append("=" * 60)
+
+    for group_name, fields in _FIELD_GROUPS:
+        if group_name not in relevant_groups:
+            continue
+
+        group_lines: list[str] = []
+        for field in fields:
+            value = lead.get(field)
+            if value is None:
+                continue
+            if isinstance(value, list) and len(value) == 0:
+                continue
+            if isinstance(value, dict) and len(value) == 0:
+                continue
+            if isinstance(value, (list, dict)):
+                formatted = json.dumps(value, indent=2, default=str)
+            elif isinstance(value, bool):
+                formatted = str(value)
+            elif isinstance(value, (int, float)):
+                formatted = str(value)
+            else:
+                formatted = str(value)
+            group_lines.append(f"  {field}: {formatted}")
+
+        if group_lines:
+            lines.append(f"\n--- {group_name} ---")
+            lines.extend(group_lines)
+
+    lines.append("\n" + "=" * 60)
+    return "\n".join(lines)
+
 
 def build_profile_context(lead: dict[str, Any]) -> str:
     """
-    Build a structured text representation of the lead record
+    Build a structured text representation of the FULL lead record
     for use as LLM context. Only includes fields with non-None values.
     Never mutates the lead dict.
+
+    Used for legacy single-instruction mode and for "tell me everything"
+    type requests where full context is appropriate.
     """
     lines: list[str] = []
     lines.append("=" * 60)
@@ -291,12 +472,10 @@ def build_profile_context(lead: dict[str, Any]) -> str:
             value = lead.get(field)
             if value is None:
                 continue
-            # Skip empty collections
             if isinstance(value, list) and len(value) == 0:
                 continue
             if isinstance(value, dict) and len(value) == 0:
                 continue
-            # Format the value
             if isinstance(value, (list, dict)):
                 formatted = json.dumps(value, indent=2, default=str)
             elif isinstance(value, bool):
@@ -331,12 +510,19 @@ def _get_model_name() -> str:
         "openai": "gpt-4o",
         "anthropic": "claude-sonnet-4-20250514",
         "openrouter": "openai/gpt-4o",
+        "ollama": "qwen2.5-coder:7b",
     }
     return os.getenv("MATRIX_MODEL_NAME", defaults.get(provider, "gpt-4o"))
 
 
-def _call_openai(system_prompt: str, user_message: str) -> str:
+def _call_openai(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
     """Call OpenAI API."""
+    import time
+
     import httpx
 
     api_key = os.getenv("OPENAI_API_KEY")
@@ -344,29 +530,51 @@ def _call_openai(system_prompt: str, user_message: str) -> str:
         raise RuntimeError("OPENAI_API_KEY is not set")
 
     model = _get_model_name()
-    response = httpx.post(
-        "https://api.openai.com/v1/chat/completions",
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
-        json={
-            "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
-            "temperature": 0.7,
-            "max_tokens": 4096,
-        },
-        timeout=120.0,
-    )
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+    ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_message})
+
+    # Bounded connect/overall timeouts. Only transient transport failures
+    # (connect timeout, reset, stalled connection) are retried, with short
+    # capped backoff; deterministic HTTP errors are never retried.
+    timeout = httpx.Timeout(120.0, connect=10.0)
+    max_attempts = 3
+
+    for attempt in range(1, max_attempts + 1):
+        try:
+            response = httpx.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json",
+                },
+                json={
+                    "model": model,
+                    "messages": messages,
+                    "max_completion_tokens": 4096,
+                },
+                timeout=timeout,
+            )
+            break
+        except httpx.TransportError:
+            if attempt == max_attempts:
+                raise
+            time.sleep(min(2 ** (attempt - 1), 4))
+
     response.raise_for_status()
     data = response.json()
     return data["choices"][0]["message"]["content"]
 
 
-def _call_anthropic(system_prompt: str, user_message: str) -> str:
+def _call_anthropic(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
     """Call Anthropic API."""
     import httpx
 
@@ -375,6 +583,13 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
         raise RuntimeError("ANTHROPIC_API_KEY is not set")
 
     model = _get_model_name()
+
+    messages: list[dict[str, Any]] = []
+    if history:
+        for msg in history:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+    messages.append({"role": "user", "content": user_message})
+
     response = httpx.post(
         "https://api.anthropic.com/v1/messages",
         headers={
@@ -385,9 +600,7 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
         json={
             "model": model,
             "system": system_prompt,
-            "messages": [
-                {"role": "user", "content": user_message},
-            ],
+            "messages": messages,
             "max_tokens": 4096,
             "temperature": 0.7,
         },
@@ -398,7 +611,11 @@ def _call_anthropic(system_prompt: str, user_message: str) -> str:
     return data["content"][0]["text"]
 
 
-def _call_openrouter(system_prompt: str, user_message: str) -> str:
+def _call_openrouter(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
     """Call OpenRouter API."""
     import httpx
 
@@ -407,6 +624,14 @@ def _call_openrouter(system_prompt: str, user_message: str) -> str:
         raise RuntimeError("OPENROUTER_API_KEY is not set")
 
     model = _get_model_name()
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+    ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_message})
+
     response = httpx.post(
         "https://openrouter.ai/api/v1/chat/completions",
         headers={
@@ -415,10 +640,7 @@ def _call_openrouter(system_prompt: str, user_message: str) -> str:
         },
         json={
             "model": model,
-            "messages": [
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_message},
-            ],
+            "messages": messages,
             "temperature": 0.7,
             "max_tokens": 4096,
         },
@@ -429,18 +651,56 @@ def _call_openrouter(system_prompt: str, user_message: str) -> str:
     return data["choices"][0]["message"]["content"]
 
 
-def _call_passthrough(system_prompt: str, user_message: str) -> str:
+def _call_ollama(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
+    """Call a local Ollama instance."""
+    import httpx
+
+    base_url = os.getenv("MATRIX_OLLAMA_BASE_URL", "http://127.0.0.1:11434")
+    model = _get_model_name()
+
+    messages: list[dict[str, str]] = [
+        {"role": "system", "content": system_prompt},
+    ]
+    if history:
+        messages.extend(history)
+    messages.append({"role": "user", "content": user_message})
+
+    response = httpx.post(
+        f"{base_url}/api/chat",
+        json={
+            "model": model,
+            "messages": messages,
+            "stream": False,
+            "options": {
+                "temperature": 0.7,
+                "num_predict": 4096,
+            },
+        },
+        timeout=300.0,
+    )
+    response.raise_for_status()
+    data = response.json()
+    return data["message"]["content"]
+
+
+def _call_passthrough(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
     """
-    Fallback passthrough mode: returns the instruction + context summary
-    without LLM generation. Useful for testing the full pipeline without
-    an LLM API key.
+    Fallback when no LLM provider is configured.
+    Returns a clean user-facing message — never dumps profile context.
     """
     return (
-        f"[MATRIX PASSTHROUGH MODE — No LLM provider configured]\n\n"
-        f"Instruction received:\n{user_message}\n\n"
-        f"To enable LLM generation, set MATRIX_LLM_PROVIDER and the "
-        f"corresponding API key in your .env file.\n\n"
-        f"Supported providers: openai, anthropic, openrouter, passthrough"
+        "Matrix AI is currently unavailable. "
+        "Please check the local AI service configuration.\n\n"
+        "Set MATRIX_LLM_PROVIDER in your .env file. "
+        "Supported providers: openai, anthropic, openrouter, ollama, passthrough"
     )
 
 
@@ -448,11 +708,16 @@ _PROVIDERS = {
     "openai": _call_openai,
     "anthropic": _call_anthropic,
     "openrouter": _call_openrouter,
+    "ollama": _call_ollama,
     "passthrough": _call_passthrough,
 }
 
 
-def generate_with_llm(system_prompt: str, user_message: str) -> str:
+def generate_with_llm(
+    system_prompt: str,
+    user_message: str,
+    history: Optional[list[dict[str, str]]] = None,
+) -> str:
     """
     Route to the configured LLM provider and return the generated text.
     Falls back to passthrough if the provider is not recognised.
@@ -461,19 +726,78 @@ def generate_with_llm(system_prompt: str, user_message: str) -> str:
     fn = _PROVIDERS.get(provider, _call_passthrough)
 
     try:
-        return fn(system_prompt, user_message)
+        return fn(system_prompt, user_message, history=history)
     except Exception as exc:
         logger.warning("LLM provider '%s' failed: %s", provider, exc)
         return (
-            f"[MATRIX GENERATION ERROR]\n\n"
-            f"Provider: {provider}\n"
-            f"Error: {exc}\n\n"
-            f"Please check your MATRIX_LLM_PROVIDER and API key configuration."
+            "Matrix AI is currently unavailable. "
+            f"The {provider} provider returned an error. "
+            "Please check your local AI service and MATRIX_LLM_PROVIDER configuration."
         )
 
 
 # ---------------------------------------------------------------------------
-# Matrix generation (main entry point)
+# Matrix generation — conversational (main entry point)
+# ---------------------------------------------------------------------------
+
+def execute_matrix_chat(
+    lead: dict[str, Any],
+    messages: list[dict[str, str]],
+) -> str:
+    """
+    Execute a conversational Matrix interaction against a lead profile.
+
+    1. Detects the relevant context from the latest user message.
+    2. Builds filtered profile context (only relevant groups).
+    3. Formats the conversation history for the LLM.
+    4. Calls the configured LLM with system prompt + context + history.
+    5. Returns the generated assistant message.
+
+    The lead dict is NEVER mutated.
+    """
+    if not messages:
+        return ""
+
+    latest_user_msg = ""
+    for msg in reversed(messages):
+        if msg.get("role") == "user":
+            latest_user_msg = msg.get("content", "")
+            break
+
+    profile_context = build_filtered_context(lead, latest_user_msg)
+
+    formatted_history: list[dict[str, str]] = []
+    for msg in messages:
+        role = msg.get("role", "user")
+        content = msg.get("content", "")
+        if role == "assistant":
+            formatted_history.append({"role": "assistant", "content": content})
+        elif role == "user":
+            formatted_history.append({"role": "user", "content": content})
+
+    if formatted_history and formatted_history[-1].get("role") == "user":
+        last_user = formatted_history.pop()
+        context_user_msg = (
+            f"{profile_context}\n\n"
+            f"--- USER MESSAGE ---\n"
+            f"{last_user['content']}"
+        )
+    else:
+        context_user_msg = (
+            f"{profile_context}\n\n"
+            f"--- USER MESSAGE ---\n"
+            f"{latest_user_msg}"
+        )
+
+    return generate_with_llm(
+        MATRIX_SYSTEM_PROMPT,
+        context_user_msg,
+        history=formatted_history if formatted_history else None,
+    )
+
+
+# ---------------------------------------------------------------------------
+# Matrix generation — legacy single-instruction mode
 # ---------------------------------------------------------------------------
 
 def execute_matrix_instruction(
@@ -662,6 +986,8 @@ def save_final(
 
 __all__ = [
     "build_profile_context",
+    "build_filtered_context",
+    "execute_matrix_chat",
     "execute_matrix_instruction",
     "store_output",
     "fetch_outputs",

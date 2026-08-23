@@ -1,3 +1,8 @@
+export interface MatrixMessage {
+  role: "user" | "assistant";
+  content: string;
+}
+
 export interface MatrixOutput {
   id: string;
   application_number: string;
@@ -43,7 +48,7 @@ async function apiGet<T>(path: string): Promise<T> {
     });
   } catch {
     throw new Error(
-      `Could not reach the PermitSignal API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
+      `Could not reach the Provo Administrative Services Finance API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
     );
   }
 
@@ -76,7 +81,7 @@ async function apiPost<T>(
     });
   } catch {
     throw new Error(
-      `Could not reach the PermitSignal API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
+      `Could not reach the Provo Administrative Services Finance API at ${PERMITSIGNAL_API_URL}. Is the backend running?`
     );
   }
 
@@ -93,6 +98,17 @@ async function apiPost<T>(
   }
 
   return response.json() as Promise<T>;
+}
+
+export async function generateMatrixChat(
+  applicationNumber: string,
+  messages: MatrixMessage[],
+  options?: { is_draft?: boolean }
+): Promise<MatrixGenerateResponse> {
+  return apiPost(`/leads/${encodeURIComponent(applicationNumber)}/matrix`, {
+    messages,
+    is_draft: options?.is_draft ?? false,
+  });
 }
 
 export async function generateMatrixOutput(

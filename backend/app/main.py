@@ -1134,30 +1134,43 @@ def matrix_generate(application_number: str, request: MatrixGenerateRequest):
                 detail=f"No lead on record for application_number={application_number!r}",
             )
 
-        previous_output = None
-        if request.previous_version is not None:
-            previous_record = matrix_engine.fetch_output_by_version(
-                application_number, request.previous_version,
+        if request.messages:
+            generated_output = matrix_engine.execute_matrix_chat(
+                lead, request.messages,
             )
-            if previous_record is not None:
-                previous_output = previous_record.get("output")
+            last_user_msg = ""
+            for msg in reversed(request.messages):
+                if msg.get("role") == "user":
+                    last_user_msg = msg.get("content", "")
+                    break
+            instruction_for_storage = last_user_msg or "[chat]"
+        else:
+            instruction_text = request.instruction or ""
+            previous_output = None
+            if request.previous_version is not None:
+                previous_record = matrix_engine.fetch_output_by_version(
+                    application_number, request.previous_version,
+                )
+                if previous_record is not None:
+                    previous_output = previous_record.get("output")
 
-        generated_output = matrix_engine.execute_matrix_instruction(
-            lead, request.instruction, previous_output=previous_output,
-        )
+            generated_output = matrix_engine.execute_matrix_instruction(
+                lead, instruction_text, previous_output=previous_output,
+            )
+            instruction_for_storage = instruction_text
 
         version = matrix_engine.get_next_version(application_number)
 
         if request.is_draft:
             stored = matrix_engine.save_draft(
                 application_number=application_number,
-                instruction=request.instruction,
+                instruction=instruction_for_storage,
                 output=generated_output,
             )
         else:
             stored = matrix_engine.save_final(
                 application_number=application_number,
-                instruction=request.instruction,
+                instruction=instruction_for_storage,
                 output=generated_output,
             )
 
