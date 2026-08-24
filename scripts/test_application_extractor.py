@@ -5,6 +5,11 @@ import pymupdf
 from backend.app.services.application_extractor import (
     extract_application_type,
     extract_applications,
+    extract_agenda_section,
+    split_agenda_items,
+    extract_case_identifier,
+    extract_description,
+    find_case_identifiers,
 )
 
 
@@ -513,6 +518,329 @@ def run_application_type_regression_checks() -> bool:
 
 
 # ============================================================
+# CASE IDENTIFIER EXTRACTION REGRESSION CHECKS
+# ============================================================
+
+def run_case_identifier_checks() -> bool:
+    """
+    Regression coverage for multi-label Case ID / Application ID
+    extraction: explicit labels (Case Number, Application Number, File
+    Number, Project Number, Planning/Development variants), bare
+    jurisdiction header style ("Case PUD-871", real Tulsa TMAPC staff
+    report), the unlabeled Provo inline format, exact-source-value
+    preservation, and evidence-backed None when no identifier exists.
+    """
+
+    print()
+    print("=" * 80)
+    print("CASE IDENTIFIER EXTRACTION CHECKS")
+    print("=" * 80)
+
+    results = []
+
+    def expect_identifier(
+        text,
+        value,
+        label=None,
+        id_type=None,
+        label_result=None,
+    ):
+
+        identifier = extract_case_identifier(text)
+
+        passed = bool(identifier) and (
+            identifier["value"] == value
+        )
+
+        if label is not None:
+            passed = passed and (
+                identifier.get("label") == label
+            )
+
+        if id_type is not None:
+            passed = passed and (
+                identifier.get("type") == id_type
+            )
+
+        results.append(
+            check(
+                passed,
+                f"{label_result or value!r} <- "
+                f"{text[:52]!r}",
+            )
+        )
+
+        return identifier
+
+    # Real Tulsa County TMAPC header style.
+    expect_identifier(
+        "Case PUD-871 Staff Report",
+        "PUD-871",
+        label="Case",
+        id_type="case",
+    )
+
+    # Explicit labels across jurisdictions.
+    expect_identifier(
+        "Case Number: CZ-565",
+        "CZ-565",
+        label="Case Number",
+        id_type="case",
+    )
+
+    expect_identifier(
+        "Case No. 2024-SUP-0117",
+        "2024-SUP-0117",
+        label="Case No.",
+    )
+
+    expect_identifier(
+        "Application Number APP-2024-0042",
+        "APP-2024-0042",
+        label="Application Number",
+        id_type="application",
+    )
+
+    expect_identifier(
+        "Application No. ZC-25-114",
+        "ZC-25-114",
+        label="Application No.",
+    )
+
+    expect_identifier(
+        "File Number 22-5566",
+        "22-5566",
+        label="File Number",
+        id_type="file",
+    )
+
+    expect_identifier(
+        "Project Number PRJ-9911",
+        "PRJ-9911",
+        label="Project Number",
+        id_type="project",
+    )
+
+    expect_identifier(
+        "Planning Application Number PLA2025-001",
+        "PLA2025-001",
+        label="Planning Application Number",
+    )
+
+    expect_identifier(
+        "Development Application No. DA-2026-77",
+        "DA-2026-77",
+        label="Development Application No.",
+    )
+
+    # Unlabeled Provo inline format: matched by format alone, so the
+    # source label stays None and confidence is MEDIUM.
+    provo = extract_case_identifier(
+        "Tyson Reynolds requests a Zone Map Amendment "
+        "from R1 to R2 for 2000 N Canyon Road. "
+        "PLRZ20260116"
+    )
+
+    results.append(
+        check(
+            bool(provo)
+            and provo["value"] == "PLRZ20260116"
+            and provo["label"] is None
+            and provo["confidence"] == "MEDIUM"
+            and "PLRZ20260116" in provo["evidence"],
+            "Unlabeled Provo inline number keeps provenance "
+            "(label=None, confidence=MEDIUM, evidence present)",
+        )
+    )
+
+    # Exact source preservation: no invented casing or reshaping.
+    lowered = extract_case_identifier(
+        "case cz-565 continued to next month"
+    )
+
+    results.append(
+        check(
+            bool(lowered)
+            and lowered["value"] == "cz-565",
+            'Exact source spelling preserved ("cz-565" '
+            "is not uppercased or rewritten)",
+        )
+    )
+
+    # Anti-fabrication: narrative "case" without an identifier-like
+    # token must never yield an identifier.
+    results.append(
+        check(
+            extract_case_identifier(
+                "In this case the applicant asks for a "
+                "continuance to September."
+            )
+            is None,
+            'Narrative "in this case the applicant..." '
+            "yields no identifier",
+        )
+    )
+
+    results.append(
+        check(
+            extract_case_identifier(
+                "Item 7 - Study Session on middle housing policy."
+            )
+            is None,
+            "Study-session item with no identifier yields None "
+            "(evidence-backed absence)",
+        )
+    )
+
+    # The item's own header identifier outranks a related case
+    # mentioned later in the same block.
+    related = extract_case_identifier(
+        "Case PUD-871 Staff Report\n"
+        "(Related to case CZ-565 & Plat Clydesdale)"
+    )
+
+    results.append(
+        check(
+            bool(related)
+            and related["value"] == "PUD-871"
+            and len(find_case_identifiers(related_evidence_block()))
+            >= 2,
+            "Primary header identifier wins over later "
+            "'Related to case' mention; both are findable",
+        )
+    )
+
+    # Description terminates at any supported identifier format.
+    results.append(
+        check(
+            extract_description(
+                "Acme Development requests approval of a new "
+                "data center. Case PUD-871 Staff Report"
+            )
+            == "approval of a new data center.",
+            "Description ends at a non-Provo identifier "
+            "('Case PUD-871') instead of swallowing it",
+        )
+    )
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print()
+    print(f"Checks passed: {passed}")
+    print(f"Checks failed: {failed}")
+
+    return failed == 0
+
+
+def related_evidence_block():
+    return (
+        "Case PUD-871 Staff Report\n"
+        "(Related to case CZ-565 & Plat Clydesdale)"
+    )
+
+
+# ============================================================
+# LIVE DOCUMENT IDENTIFIER PROVENANCE
+# ============================================================
+
+def run_live_identifier_checks() -> None:
+    """
+    Show identifier provenance for every extracted application in the
+    real Provo packet, plus the identifier found in the real Tulsa
+    staff report -- and list agenda items where no identifier exists
+    (evidence-backed absence, not fabrication).
+    """
+
+    import pymupdf
+
+    print()
+    print("=" * 80)
+    print("LIVE IDENTIFIER PROVENANCE")
+    print("=" * 80)
+
+    # ------------------------------------------------------------
+    # Tulsa staff report: jurisdiction-specific "Case <ID>" style.
+    # ------------------------------------------------------------
+
+    tulsa_path = Path("data/validation/PUD-871.pdf")
+
+    if tulsa_path.exists():
+
+        document = pymupdf.open(tulsa_path)
+        tulsa_text = "\n".join(
+            page.get_text("text")
+            for page in document
+        )
+        document.close()
+
+        identifier = extract_case_identifier(tulsa_text)
+
+        if identifier:
+            print()
+            print("Tulsa staff report (data/validation/PUD-871.pdf):")
+            print(f"  VALUE:      {identifier['value']}")
+            print(f"  LABEL:      {identifier['label']}")
+            print(f"  TYPE:       {identifier['type']}")
+            print(f"  CONFIDENCE: {identifier['confidence']}")
+            print(f"  EVIDENCE:   {identifier['evidence']!r}")
+        else:
+            print("[FAIL] No identifier found in PUD-871.pdf")
+
+    # ------------------------------------------------------------
+    # Provo packet: per-record provenance + items with no ID.
+    # ------------------------------------------------------------
+
+    if not PDF_PATH.exists():
+        return
+
+    text = read_pdf(PDF_PATH)
+
+    applications = extract_applications(text)
+
+    labeled = sum(
+        1
+        for application in applications
+        if application.get("application_id_label")
+    )
+
+    print()
+    print(
+        f"Provo packet ({PDF_PATH.name}): "
+        f"{len(applications)} applications, "
+        f"{labeled} with an explicit source label, "
+        f"{len(applications) - labeled} matched by format alone:"
+    )
+
+    for application in applications:
+
+        print(
+            f"  {application.get('application_number'):<14} "
+            f"| label={application.get('application_id_label')!s:<6} "
+            f"| type={application.get('application_id_type')!s:<12} "
+            f"| conf={application.get('application_id_confidence')}"
+        )
+
+    agenda = extract_agenda_section(text)
+    identified_items = {
+        application.get("item")
+        for application in applications
+    }
+
+    skipped = [
+        item_number
+        for item_number, _block in split_agenda_items(agenda)
+        if item_number not in identified_items
+    ]
+
+    if skipped:
+        print(
+            f"  Agenda items with NO application identifier "
+            f"(correctly not turned into records): {skipped}"
+        )
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -605,12 +933,24 @@ def main():
 
     regression_passed = run_application_type_regression_checks()
 
+    # --------------------------------------------------------
+    # 6. Case identifier extraction regression checks
+    # --------------------------------------------------------
+
+    identifier_checks_passed = run_case_identifier_checks()
+
+    # --------------------------------------------------------
+    # 7. Live document identifier provenance
+    # --------------------------------------------------------
+
+    run_live_identifier_checks()
+
     print()
     print("=" * 80)
     print("APPLICATION EXTRACTION TEST COMPLETE")
     print("=" * 80)
 
-    if not regression_passed:
+    if not regression_passed or not identifier_checks_passed:
         raise SystemExit(1)
 
 

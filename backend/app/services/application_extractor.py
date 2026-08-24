@@ -277,21 +277,227 @@ def extract_applicant(
 
 
 # ============================================================
-# APPLICATION NUMBER
+# CASE / APPLICATION IDENTIFIERS
+#
+# Jurisdictions label the same concept differently: "Case Number",
+# "Case ID", "Application Number", "Project Number", "File Number",
+# "Planning Application Number", "Development Application Number",
+# bare "Case PUD-871" header style (real Tulsa County TMAPC staff
+# report), or no label at all with a distinctive jurisdiction format
+# (Provo's inline PLRZ20260264-style numbers).
+#
+# Extraction is label-driven first, then falls back to known formats.
+# Every identifier is preserved EXACTLY as written in the source --
+# never normalized into a different shape, never inferred from names,
+# addresses, or other context. When no identifier exists the result is
+# an evidence-backed None.
 # ============================================================
+
+# The value token following an identifier label. Deliberately broad
+# (letters, digits, dashes, slashes, dots, underscores) so formats such
+# as PUD-871, CZ-565, 22-5566, APP-2024-0042 and PLRZ20260264 all fit;
+# _validated_case_id_value() below rejects anything that is not
+# plausibly an identifier.
+CASE_ID_VALUE_PATTERN = r"(?P<value>[A-Za-z0-9][A-Za-z0-9\-/_.]{0,39})"
+
+# Explicit identifier labels, most specific first. When two specs match
+# the same span (e.g. "Planning Application Number" contains the generic
+# "Application Number"), the earlier, more specific spec wins.
+CASE_ID_LABEL_SPECS = (
+    (r"(?:Planning|Development)\s+Application\s*(?:Number|Nos?\.?|#|ID)", "application"),
+    (r"(?:Planning|Zoning|Development)\s+Case\s*(?:Number|Nos?\.?|#|ID)", "case"),
+    (r"Application\s*(?:Number|Nos?\.?|#|ID)", "application"),
+    (r"Case\s*(?:Number|Nos?\.?|#|ID)", "case"),
+    (r"Project\s*(?:Number|Nos?\.?|#|ID)", "project"),
+    (r"File\s*(?:Number|Nos?\.?|#|ID)", "file"),
+    # Bare jurisdiction header style: "Case PUD-871 Staff Report".
+    # The lookahead requires an identifier-like token to follow, so
+    # narrative phrases such as "in this case the applicant" never match.
+    (r"Case\s*(?=[A-Za-z0-9#])", "case"),
+)
+
+_IDENTIFIER_TRAILING_PUNCTUATION = "./-,_:;)'\""
+
+# Precompiled once: these patterns are scanned against full packet
+# texts, not just individual agenda blocks.
+_COMPILED_CASE_ID_SPECS = [
+    (
+        re.compile(
+            rf"(?P<label>{body})\s*[:#]?\s*{CASE_ID_VALUE_PATTERN}",
+            re.IGNORECASE,
+        ),
+        id_type,
+    )
+    for body, id_type in CASE_ID_LABEL_SPECS
+]
+
+
+def _validated_case_id_value(raw: Optional[str]) -> Optional[str]:
+    """Accept only plausible identifiers; everything else is rejected."""
+
+    if not raw:
+        return None
+
+    value = raw.strip().strip(_IDENTIFIER_TRAILING_PUNCTUATION).strip()
+
+    if not (2 <= len(value) <= 40):
+        return None
+
+    # A real case/application/file/project number always carries at
+    # least one digit. This single rule rejects captured prose such as
+    # "the" after a narrative "in this case ...".
+    if not re.search(r"\d", value):
+        return None
+
+    return value
+
+
+def find_case_identifiers(
+    text: str,
+) -> list[dict]:
+    """
+    All evidence-backed identifier occurrences in document order.
+
+    Each entry: {value, label, type, confidence, start, end,
+    label_start}. `label` is the exact source label (whitespace-
+    normalized) or None when found by format alone. Never fabricates:
+    every value is verbatim source text.
+    """
+
+    if not text:
+        return []
+
+    candidates = []
+
+    for pattern, id_type in _COMPILED_CASE_ID_SPECS:
+
+        for match in pattern.finditer(text):
+            candidates.append(
+                {
+                    "order": match.start(),
+                    # Boundary where the identifier mention begins,
+                    # including its label -- used whenever surrounding
+                    # text must be cut before the mention.
+                    "label_start": match.start(),
+                    "start": match.start("value"),
+                    "end": match.end("value"),
+                    "raw_value": match.group("value"),
+                    "label": clean(match.group("label")),
+                    "id_type": id_type,
+                }
+            )
+
+    # Unlabeled jurisdiction format (Provo): matched by format alone,
+    # therefore lower confidence than an explicit source label.
+    for match in APPLICATION_NUMBER_PATTERN.finditer(text):
+        candidates.append(
+            {
+                "order": match.start(),
+                "label_start": match.start(),
+                "start": match.start(),
+                "end": match.end(),
+                "raw_value": match.group(0),
+                "label": None,
+                "id_type": "application",
+            }
+        )
+
+    identifiers = []
+    taken_spans = []
+
+    for candidate in sorted(
+        candidates,
+        key=lambda entry: entry["order"],
+    ):
+
+        start = candidate["start"]
+        end = candidate["end"]
+
+        if any(
+            start < taken_end and taken_start < end
+            for taken_start, taken_end in taken_spans
+        ):
+            continue
+
+        value = _validated_case_id_value(
+            candidate["raw_value"]
+        )
+
+        if not value:
+            continue
+
+        taken_spans.append((start, end))
+
+        identifiers.append(
+            {
+                "value": value,
+                "label": candidate["label"],
+                "type": candidate["id_type"],
+                "confidence": (
+                    "HIGH" if candidate["label"] else "MEDIUM"
+                ),
+                "start": start,
+                "end": end,
+                "label_start": candidate["label_start"],
+            }
+        )
+
+    return identifiers
+
+
+def _identifier_evidence(
+    text: str,
+    start: int,
+    end: int,
+) -> str:
+    """Source snippet around the identifier, proving where it came from."""
+
+    return clean(
+        text[max(0, start - 60):min(len(text), end + 80)]
+    )
+
+
+def extract_case_identifier(
+    block: str,
+) -> Optional[dict]:
+    """
+    The record's primary identifier: the first evidence-backed
+    identifier in the block. Related/secondary cases mentioned later
+    (e.g. "Related to case CZ-565") never displace it.
+    """
+
+    identifiers = find_case_identifiers(block)
+
+    if not identifiers:
+        return None
+
+    primary = dict(identifiers[0])
+
+    primary["evidence"] = _identifier_evidence(
+        block,
+        primary["start"],
+        primary["end"],
+    )
+
+    primary["source"] = "government_record"
+
+    return primary
+
 
 def extract_application_number(
     block: str,
 ) -> Optional[str]:
+    """
+    Compatibility wrapper returning just the primary identifier value.
+    Preserves the exact source spelling (no forced uppercasing).
+    """
 
-    match = APPLICATION_NUMBER_PATTERN.search(
-        block
-    )
+    identifier = extract_case_identifier(block)
 
-    if not match:
+    if not identifier:
         return None
 
-    return match.group(0).upper()
+    return identifier["value"]
 
 
 # ============================================================
@@ -457,21 +663,37 @@ def extract_description(
 ) -> Optional[str]:
     """
     Extract the request description between "requests" and
-    the government application number.
+    the case/application identifier, whatever label or format
+    the jurisdiction uses for that identifier.
     """
 
-    match = re.search(
-        r"requests?\s+(.+?)"
-        r"(?=\bPL[A-Z]{2,6}\d{8}\b)",
+    request_match = re.search(
+        r"requests?\s+",
         block,
-        re.IGNORECASE | re.DOTALL,
+        re.IGNORECASE,
     )
 
-    if not match:
+    if not request_match:
+        return None
+
+    # The description ends where the identifier mention (label included)
+    # begins. Preserves the original contract: without a terminating
+    # identifier there is no bounded description (None), never an
+    # unbounded swallow of the rest of the block.
+    boundary = next(
+        (
+            identifier["label_start"]
+            for identifier in find_case_identifiers(block)
+            if identifier["label_start"] >= request_match.end()
+        ),
+        None,
+    )
+
+    if boundary is None:
         return None
 
     return clean(
-        match.group(1)
+        block[request_match.end():boundary]
     )
 
 
@@ -510,16 +732,14 @@ def extract_staff_contact(
     ]
 
     # Only inspect the contact material before the
-    # application number.
-    application_match = (
-        APPLICATION_NUMBER_PATTERN.search(
-            contact_area
-        )
+    # case/application identifier.
+    identifiers = find_case_identifiers(
+        contact_area
     )
 
-    if application_match:
+    if identifiers:
         contact_area = contact_area[
-            :application_match.start()
+            :identifiers[0]["label_start"]
         ]
 
     emails = EMAIL_PATTERN.findall(
@@ -1169,16 +1389,20 @@ def _next_other_application_number_position(
     after: int,
 ) -> Optional[int]:
     """
-    Position of the next DIFFERENT application number appearing after
-    `after`, if any. Used to cap a staff-report window so that an
-    application with no routing table of its own never absorbs the next
-    application's routing table just because nothing distinguishes the
-    text in between.
+    Position of the next DIFFERENT case/application identifier appearing
+    after `after`, if any, regardless of jurisdiction format. Used to cap
+    a staff-report window so that an application with no routing table of
+    its own never absorbs the next application's routing table just
+    because nothing distinguishes the text in between.
     """
 
-    for match in APPLICATION_NUMBER_PATTERN.finditer(text, after):
-        if match.group(0).upper() != application_number.upper():
-            return match.start()
+    for identifier in find_case_identifiers(text):
+
+        if identifier["label_start"] < after:
+            continue
+
+        if identifier["value"].upper() != application_number.upper():
+            return identifier["label_start"]
 
     return None
 
@@ -1299,15 +1523,13 @@ def extract_applications(
 
     for item_number, block in items:
 
-        application_number = (
-            extract_application_number(
-                block
-            )
+        identifier = extract_case_identifier(
+            block
         )
 
         # Study-session or administrative items without
-        # an application ID are not applications.
-        if not application_number:
+        # a case/application identifier are not applications.
+        if not identifier:
             continue
 
         applicant = extract_applicant(
@@ -1383,7 +1605,25 @@ def extract_applications(
 
             # Application
             "application_number":
-                application_number,
+                identifier["value"],
+
+            # Identifier provenance: exact source label ("Case Number",
+            # "File No.", ...), canonical type, confidence, and the
+            # source snippet proving where the identifier came from.
+            "application_id_label":
+                identifier["label"],
+
+            "application_id_type":
+                identifier["type"],
+
+            "application_id_confidence":
+                identifier["confidence"],
+
+            "application_id_evidence":
+                identifier["evidence"],
+
+            "application_id_source":
+                identifier["source"],
 
             "application_type":
                 extract_application_type(
@@ -1464,13 +1704,11 @@ def extract_application_from_block(
     Useful for unit tests or future municipal adapters.
     """
 
-    application_number = (
-        extract_application_number(
-            block
-        )
+    identifier = extract_case_identifier(
+        block
     )
 
-    if not application_number:
+    if not identifier:
         return None
 
     applicant = extract_applicant(
@@ -1520,7 +1758,22 @@ def extract_application_from_block(
         ],
 
         "application_number":
-            application_number,
+            identifier["value"],
+
+        "application_id_label":
+            identifier["label"],
+
+        "application_id_type":
+            identifier["type"],
+
+        "application_id_confidence":
+            identifier["confidence"],
+
+        "application_id_evidence":
+            identifier["evidence"],
+
+        "application_id_source":
+            identifier["source"],
 
         "application_type":
             extract_application_type(
