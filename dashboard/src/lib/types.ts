@@ -58,6 +58,18 @@ export interface Party {
   party_confidence: string | null;
 }
 
+// Structured property-address components extracted from the source
+// document (application_extractor.parse_address_components). Any
+// component the source does not state stays null -- never inferred.
+export interface PropertyAddressComponents {
+  street_number: string | null;
+  street_name: string | null;
+  unit: string | null;
+  city: string | null;
+  state: string | null;
+  postal_code: string | null;
+}
+
 export interface Lead {
   application_number: string;
   applicant_name: string | null;
@@ -72,6 +84,26 @@ export interface Lead {
   status: unknown;
   description: string | null;
   project_description?: string | null;
+
+  // Case identifier provenance (application_extractor.extract_case_identifier):
+  // application_number above IS the government-issued identifier read from
+  // the source document; these fields record HOW the source identifies it.
+  application_id_label?: string | null;
+  application_id_type?: string | null;
+  application_id_confidence?: string | null;
+  application_id_evidence?: string | null;
+  application_id_source?: string | null;
+
+  // Full property address intelligence
+  // (application_extractor.extract_property_address). property_address_full
+  // is the most complete form actually stated in the source; components are
+  // parsed from it; completeness says how much the source provides.
+  property_address_full?: string | null;
+  property_address_components?: PropertyAddressComponents | null;
+  property_address_completeness?: string | null;
+  property_address_source?: string | null;
+  property_address_confidence?: string | null;
+  property_address_evidence?: string | null;
 
   // Property (populated only when the source document labels them)
   parcel_number: string | null;
