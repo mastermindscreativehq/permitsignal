@@ -612,6 +612,379 @@ def extract_address(
 
 
 # ============================================================
+# FULL PROPERTY ADDRESS INTELLIGENCE
+#
+# extract_address() above deliberately keeps its historical contract
+# (street-level project_address, byte-compatible). This layer captures
+# the MOST COMPLETE address the source actually provides -- street
+# number, street name, explicitly stated unit information, and
+# city/state/ZIP where the document includes them -- without ever
+# inventing missing components. An agenda that states only
+# "2000 N Canyon Road" yields street-only components and an
+# evidence-backed None for city/state/ZIP.
+#
+# Preference order mirrors real packets: an explicitly labeled
+# property/site/project address outranks the "located at" phrase,
+# which outranks a bare street-pattern match. Applicant/staff mailing
+# addresses (e.g. the city's own "445 W Center Street, Suite 200")
+# are never substituted for the project address: every capture is
+# anchored to the project phrase itself.
+# ============================================================
+
+ADDRESS_COMPONENT_KEYS = (
+    "street_number",
+    "street_name",
+    "unit",
+    "city",
+    "state",
+    "postal_code",
+)
+
+# Explicitly stated unit/designator immediately following a street
+# address ("Suite 200", "Unit B", "#12"). Never applied unless the
+# source places it directly after the captured address.
+ADDRESS_UNIT_TAIL_PATTERN = re.compile(
+    r"[ ]*,?[ ]*(?:Unit|Suite|Ste\.?|#)[ ]*:?[ ]*"
+    r"(?P<unit>[A-Za-z0-9][A-Za-z0-9\-]{0,9})\b",
+    re.IGNORECASE,
+)
+
+# Trailing ", City, ST 84604" / ", City, Utah 84604-1234" /
+# ", Provo UT" style tails. Requires a comma so ordinary sentence
+# continuation can never be mistaken for a city/state pair.
+ADDRESS_CITY_STATE_TAIL_PATTERN = re.compile(
+    r",[ ]*"
+    r"(?P<city>[A-Z][A-Za-z .'\-]{0,39}?)"
+    r"[ ]*,?[ ]+"
+    r"(?P<state>[A-Z]{2}|[A-Z][a-z]{2,14}(?:[ ]+[A-Z][a-z]{2,14})?)"
+    r"[ ]*"
+    r"(?P<postal>\d{5}(?:-\d{4})?)?"
+    r"(?![A-Za-z0-9])",
+)
+
+# Labeled anchors, most authoritative first. Values may sit on the
+# same line or on the following line(s) (routing-table style).
+PROPERTY_ADDRESS_ANCHOR_LABELS = (
+    "Property Address",
+    "Site Address",
+    "Project Address",
+    "Property Location",
+)
+
+
+def _empty_property_address() -> dict:
+    """Stable all-absent shape; absence is evidence-backed, never guessed."""
+
+    return {
+        "address": None,
+        "components": {key: None for key in ADDRESS_COMPONENT_KEYS},
+        "completeness": None,
+        "anchor": None,
+        "confidence": None,
+        "evidence": None,
+        "source": None,
+    }
+
+
+def _address_core_and_tail(
+    candidate: str,
+) -> Optional[dict]:
+    """
+    Street-core capture (same SPECIAL-before-normal precedence as
+    extract_address()) plus optional unit/city/state/ZIP tails, taken
+    only from characters actually present in the candidate.
+    """
+
+    core = (
+        SPECIAL_ADDRESS_PATTERN.search(candidate)
+        or ADDRESS_PATTERN.search(candidate)
+    )
+
+    address_text = None
+    components = {key: None for key in ADDRESS_COMPONENT_KEYS}
+    matched_end = None
+
+    if core:
+
+        address_text = clean(core.group(0))
+        matched_end = core.end()
+
+        components["street_number"] = clean(
+            re.match(r"\d{1,6}(?:/\d+)?", address_text).group(0)
+        )
+        components["street_name"] = clean(
+            address_text[
+                len(components["street_number"]):
+            ].strip(" ,.-")
+        ) or None
+
+        completeness = "street_only"
+
+    elif re.search(r"\d", candidate):
+        # Unusual jurisdiction format with a number but no recognized
+        # street suffix: keep the verbatim text rather than dropping it.
+        address_text = clean(candidate)
+        completeness = "free_text"
+
+    else:
+        return None
+
+    if matched_end is not None:
+
+        unit_match = ADDRESS_UNIT_TAIL_PATTERN.match(
+            candidate,
+            matched_end,
+        )
+
+        if unit_match:
+            components["unit"] = clean(unit_match.group("unit"))
+            matched_end = unit_match.end()
+            completeness = "street_with_unit"
+
+        state_zip_match = ADDRESS_CITY_STATE_TAIL_PATTERN.match(
+            candidate,
+            matched_end,
+        )
+
+        if state_zip_match:
+
+            components["city"] = clean(state_zip_match.group("city"))
+            components["state"] = clean(state_zip_match.group("state"))
+
+            postal = clean(state_zip_match.group("postal"))
+
+            components["postal_code"] = (
+                postal
+                if postal and re.fullmatch(r"\d{5}(?:-\d{4})?", postal)
+                else None
+            )
+
+            if components["postal_code"]:
+                completeness = "full_postal"
+            else:
+                completeness = "street_city_state"
+
+            matched_end = state_zip_match.end()
+
+        address_text = clean(candidate[:matched_end])
+
+    return {
+        "address": address_text,
+        "components": components,
+        "completeness": completeness,
+    }
+
+
+def _bounded_location_candidate(
+    raw_value: str,
+) -> str:
+    """
+    Trim an anchored raw capture to the address-bearing portion:
+    stops at a following sentence, a Neighborhood tag, or the next
+    labeled field -- whatever comes first.
+    """
+
+    value = clean(raw_value) or ""
+
+    value = re.split(
+        r"\.\s+[A-Z]|\bNeighborhood\b|\s{2,}",
+        value,
+        maxsplit=1,
+    )[0]
+
+    return value.strip(" .;,") or ""
+
+
+def _anchor_label_value(
+    text: str,
+    label: str,
+) -> Optional[str]:
+    """
+    Value of a labeled address field, same-line or on the following
+    line(s), stopping before the next recognized field label.
+    """
+
+    lines = _labeled_lines(text, label)
+
+    if lines:
+        return clean(" ".join(lines))
+
+    return None
+
+
+def extract_property_address(
+    block: str,
+) -> dict:
+    """
+    Most complete evidence-backed property address in an agenda item
+    block. See the section comment above for the preference rules.
+    Returns the stable shape from _empty_property_address().
+    """
+
+    if not block:
+        return _empty_property_address()
+
+    attempts: list[tuple[str, str]] = []
+
+    # --------------------------------------------------------
+    # First: explicitly labeled property-address fields.
+    # --------------------------------------------------------
+
+    for label in PROPERTY_ADDRESS_ANCHOR_LABELS:
+
+        value = _anchor_label_value(block, label)
+
+        if value:
+            attempts.append((label.lower(), _bounded_location_candidate(value)))
+
+    # --------------------------------------------------------
+    # Second: the "located at" project phrase.
+    # --------------------------------------------------------
+
+    located = re.search(
+        r"located at\s+(.{5,220}?)"
+        r"(?:\.\s+|\bNeighborhood\b|$)",
+        block,
+        re.IGNORECASE | re.DOTALL,
+    )
+
+    if located:
+        attempts.append(("located_at", _bounded_location_candidate(located.group(1))))
+
+    # --------------------------------------------------------
+    # Third: whole-block street-pattern fallback.
+    # --------------------------------------------------------
+
+    bare = (
+        SPECIAL_ADDRESS_PATTERN.search(block)
+        or ADDRESS_PATTERN.search(block)
+    )
+
+    if bare:
+        attempts.append(("street_pattern", clean(bare.group(0))))
+
+    for anchor, candidate in attempts:
+
+        if not candidate:
+            continue
+
+        intel = _address_core_and_tail(candidate)
+
+        if not intel:
+            # A labeled area description with no street address
+            # (real Tulsa TMAPC style: "West of North Sheridan Road
+            # between East 76th Street North and East 86th Street
+            # North") is still genuine government-record location
+            # evidence -- captured as-is, flagged as an area.
+            if anchor != "street_pattern":
+                return {
+                    "address": candidate,
+                    "components": {
+                        key: None for key in ADDRESS_COMPONENT_KEYS
+                    },
+                    "completeness": "area_description",
+                    "anchor": anchor,
+                    "confidence": (
+                        "MEDIUM" if anchor == "located_at" else "HIGH"
+                    ),
+                    "evidence": _property_address_evidence(
+                        block,
+                        candidate,
+                    ),
+                    "source": "government_record",
+                }
+            continue
+
+        intel["anchor"] = anchor
+        intel["confidence"] = (
+            "HIGH" if anchor != "street_pattern" else "MEDIUM"
+        )
+
+        # An anchored capture with no recognizable street core and no
+        # leading house number is an area/description location (real
+        # Tulsa style: "West of North Sheridan Road between East 76th
+        # Street North ..."), even when it mentions numbered streets.
+        if (
+            intel["completeness"] == "free_text"
+            and anchor != "street_pattern"
+            and not re.match(r"\s*\d", candidate)
+        ):
+            intel["components"] = {
+                key: None for key in ADDRESS_COMPONENT_KEYS
+            }
+            intel["completeness"] = "area_description"
+
+        intel["evidence"] = _property_address_evidence(
+            block,
+            intel["address"],
+        )
+        intel["source"] = "government_record"
+
+        return intel
+
+    return _empty_property_address()
+
+
+def _property_address_evidence(
+    block: str,
+    address_text: str,
+) -> Optional[str]:
+    """Source snippet around the captured address, proving its origin."""
+
+    if not address_text:
+        return None
+
+    probe = address_text[:40]
+    position = block.find(probe.split(",")[0][:20])
+
+    if position < 0:
+        position = 0
+
+    return clean(
+        block[
+            max(0, position - 60):
+            min(len(block), position + len(probe) + 120)
+        ]
+    )
+
+
+def parse_address_components(
+    address: Optional[str],
+) -> dict:
+    """
+    Split an already-captured address string into its evidence-backed
+    components. Components the string does not contain stay None.
+    """
+
+    components = {key: None for key in ADDRESS_COMPONENT_KEYS}
+
+    if not address:
+        return components
+
+    intel = _address_core_and_tail(clean(address))
+
+    if intel:
+        return intel["components"]
+
+    return components
+
+
+def _property_address_fields(
+    intel: dict,
+) -> dict:
+    """Flatten an extract_property_address() result into record fields."""
+
+    return {
+        "property_address_full": intel.get("address"),
+        "property_address_components": intel.get("components"),
+        "property_address_completeness": intel.get("completeness"),
+        "property_address_source": intel.get("source"),
+        "property_address_confidence": intel.get("confidence"),
+        "property_address_evidence": intel.get("evidence"),
+    }
+
+
+# ============================================================
 # NEIGHBORHOOD
 # ============================================================
 
@@ -1058,6 +1431,7 @@ _KNOWN_LABEL_STARTS = re.compile(
     r"|Developer(?:\s+of\s+Record)?"
     r"|Zoning|Property\s+Location|Tract\s+Size|Total\s+Area|Acreage"
     r"|Parcel(?:\s+(?:Number|ID))?"
+    r"|(?:Property\s+|Site\s+|Project\s+)?Address"
     r"|Staff\s+Contact|Prepared\s+by"
     r")\b",
     re.IGNORECASE,
@@ -1180,14 +1554,40 @@ def extract_property_details(text: str) -> dict:
     Property-level facts (zoning/area/parcel), only when explicitly labeled.
     """
 
+    # Specific labels first, same-line and multi-line forms, before the
+    # generic bare "Parcel" label: its loose template can otherwise
+    # misread a "PARCEL ID:" row's trailing "ID:" as the value.
+    parcel = (
+        _labeled_value(text, "Parcel Number")
+        or _labeled_value(text, "Parcel ID")
+    )
+
+    if not parcel:
+        # Real Provo routing tables put the label alone on its line with
+        # the (often multiple, comma-separated) parcel numbers wrapped
+        # across following lines. Joining continuation lines preserves
+        # the source commas verbatim.
+        parcel_lines = (
+            _labeled_lines(text, "Parcel ID")
+            or _labeled_lines(text, "Parcel Number")
+        )
+
+        if parcel_lines:
+            parcel = clean(" ".join(parcel_lines))
+
+    if not parcel:
+        bare = _labeled_value(text, "Parcel")
+
+        if bare and not re.fullmatch(
+            r"(?i)(?:id|number)\s*:?",
+            bare,
+        ):
+            parcel = bare
+
     return {
         "zoning": _labeled_value(text, "Zoning"),
         "acreage": _labeled_value(text, "Total Area") or _labeled_value(text, "Acreage"),
-        "parcel_number": (
-            _labeled_value(text, "Parcel Number")
-            or _labeled_value(text, "Parcel ID")
-            or _labeled_value(text, "Parcel")
-        ),
+        "parcel_number": parcel,
     }
 
 
@@ -1472,6 +1872,441 @@ def extract_staff_report_identity(text: str, application_number: Optional[str]) 
 
 
 # ============================================================
+# STAFF-REPORT FULL ADDRESS ENRICHMENT
+#
+# Agenda blocks usually state the project street address without
+# city/state/ZIP ("located at 2000 N Canyon Road."). The SAME packet's
+# staff reports / applicant letters often carry the fuller form
+# ("1507 South 180 East, Provo, UT"). This enrichment scans the same
+# per-application staff-report windows used by
+# extract_staff_report_identity() and upgrades an application's address
+# ONLY with a fuller form of the SAME street -- matched by street
+# number plus direction-tolerant street-name tokens -- so the city's
+# own mailing address or an unrelated property can never be attached.
+# When the agenda block had no usable address at all, only explicitly
+# LABELED address fields ("Property Address:", "Site Address:",
+# "Project Address:", "Property Location:") are trusted. Parcel IDs
+# come solely from explicitly labeled routing-table fields.
+#
+# Never fabricates: every component is verbatim source text.
+# ============================================================
+
+_DIRECTION_TOKEN_ALTERNATIVES = {
+    "n": "(?:N|North)",
+    "s": "(?:S|South)",
+    "e": "(?:E|East)",
+    "w": "(?:W|West)",
+    "north": "(?:N|North)",
+    "south": "(?:S|South)",
+    "east": "(?:E|East)",
+    "west": "(?:W|West)",
+}
+
+_PROPERTY_ADDRESS_COMPLETENESS_RANK = {
+    None: 0,
+    "free_text": 1,
+    "area_description": 2,
+    "street_only": 2,
+    "street_with_unit": 3,
+    "street_city_state": 4,
+    "full_postal": 5,
+}
+
+
+def _address_core_tokens(
+    address_text: Optional[str],
+) -> Optional[list[str]]:
+    """
+    Street-core tokens (number + street name/direction/suffix words)
+    from an already-captured address, for same-street matching.
+    """
+
+    if not address_text:
+        return None
+
+    core = (
+        SPECIAL_ADDRESS_PATTERN.search(address_text)
+        or ADDRESS_PATTERN.search(address_text)
+    )
+
+    source_text = core.group(0) if core else address_text
+
+    tokens = re.findall(r"[A-Za-z0-9]+", source_text)
+
+    if not tokens or not tokens[0].isdigit():
+        return None
+
+    return tokens
+
+
+def _same_street_pattern(
+    address_tokens: list[str],
+) -> re.Pattern:
+    """
+    Flexible regex matching the SAME street with direction-word
+    variants ("1507 S 180 E" == "1507 South 180 East"). Non-direction
+    tokens must appear verbatim, whitespace-tolerant.
+    """
+
+    parts = []
+
+    for token in address_tokens:
+        alternative = _DIRECTION_TOKEN_ALTERNATIVES.get(
+            token.lower()
+        )
+        parts.append(
+            alternative
+            if alternative
+            else re.escape(token)
+        )
+
+    return re.compile(
+        # Trailing boundary keeps short direction alternatives
+        # ("E") from matching inside longer words ("East").
+        r"\b" + r"\s+".join(parts) + r"\b",
+        re.IGNORECASE,
+    )
+
+
+def _staff_report_window_intel(
+    window: str,
+    application: dict,
+) -> tuple[Optional[dict], Optional[str]]:
+    """
+    Best address upgrade + parcel evidence from one staff-report
+    window. Returns (intel_or_None, parcel_or_None).
+    """
+
+    parcel = extract_property_details(window).get(
+        "parcel_number"
+    )
+
+    baseline_full = (
+        application.get("property_address_full")
+        or application.get("project_address")
+    )
+
+    baseline_components = (
+        application.get("property_address_components")
+        or {}
+    )
+
+    baseline_rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+        application.get("property_address_completeness"),
+        0,
+    ) or (2 if baseline_full else 0)
+
+    address_tokens = _address_core_tokens(baseline_full)
+
+    best_intel = None
+
+    # --------------------------------------------------------
+    # Same-street fuller forms.
+    # --------------------------------------------------------
+
+    if address_tokens:
+
+        pattern = _same_street_pattern(address_tokens)
+
+        for match in pattern.finditer(window):
+
+            # Bound the tail slice at sentence/neighborhood
+            # terminators so a period cannot leak into the captured
+            # address while comma tails (", Provo, UT 84601") remain
+            # reachable.
+            candidate = _bounded_location_candidate(
+                window[
+                    match.start():match.end() + 120
+                ]
+            )
+
+            if not candidate:
+                continue
+
+            tail = _address_core_and_tail(candidate)
+
+            if not tail or not tail["address"]:
+                continue
+
+            candidate_rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+                tail["completeness"],
+                0,
+            )
+
+            if candidate_rank <= baseline_rank:
+                continue
+
+            new_components = {
+                **baseline_components,
+                **{
+                    key: value
+                    for key, value in tail["components"].items()
+                    if value is not None
+                },
+            }
+
+            candidate_intel = {
+                "property_address_full": tail["address"],
+                "property_address_components": new_components,
+                "property_address_completeness": tail["completeness"],
+                "property_address_source": "government_record",
+                "property_address_confidence": "HIGH",
+                "property_address_evidence": clean(
+                    window[
+                        max(0, match.start() - 60):
+                        match.end() + 140
+                    ]
+                ),
+            }
+
+            if best_intel is None or candidate_rank > _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+                best_intel["property_address_completeness"],
+                0,
+            ):
+                best_intel = candidate_intel
+
+    # --------------------------------------------------------
+    # No usable agenda address: trust explicit labels only.
+    # --------------------------------------------------------
+
+    elif not baseline_full:
+
+        for label in PROPERTY_ADDRESS_ANCHOR_LABELS:
+
+            raw = _anchor_label_value(window, label)
+
+            if not raw:
+                continue
+
+            candidate = _bounded_location_candidate(raw)
+
+            if not candidate:
+                continue
+
+            intel = _address_core_and_tail(candidate)
+
+            if intel and intel["address"]:
+
+                best_intel = {
+                    "property_address_full": intel["address"],
+                    "property_address_components": intel["components"],
+                    "property_address_completeness": intel["completeness"],
+                    "property_address_source": "government_record",
+                    "property_address_confidence": "HIGH",
+                    "property_address_evidence": _property_address_evidence(
+                        window,
+                        intel["address"],
+                    ),
+                }
+
+            else:
+
+                best_intel = {
+                    "property_address_full": candidate,
+                    "property_address_components": {
+                        key: None for key in ADDRESS_COMPONENT_KEYS
+                    },
+                    "property_address_completeness": "area_description",
+                    "property_address_source": "government_record",
+                    "property_address_confidence": "HIGH",
+                    "property_address_evidence": _property_address_evidence(
+                        window,
+                        candidate,
+                    ),
+                }
+
+            break
+
+    return best_intel, parcel
+
+
+def _document_wide_same_street_intel(
+    text: str,
+    application: dict,
+) -> Optional[dict]:
+    """
+    Best fuller same-street address anywhere in the packet text.
+
+    Applications routinely share one property across several items,
+    and the fullest spelling of that address often appears only in
+    one item's staff-report letter. Same-street matching (exact
+    street number plus direction-tolerant name tokens) keeps this
+    safe: a different property cannot collide.
+    """
+
+    address_tokens = _address_core_tokens(
+        application.get("property_address_full")
+        or application.get("project_address")
+    )
+
+    if not address_tokens:
+        return None
+
+    baseline_components = (
+        application.get("property_address_components")
+        or {}
+    )
+
+    baseline_rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+        application.get("property_address_completeness"),
+        0,
+    ) or (2 if application.get("property_address_full") else 0)
+
+    pattern = _same_street_pattern(address_tokens)
+
+    best_intel = None
+    best_rank = baseline_rank
+
+    for match in pattern.finditer(text):
+
+        candidate = _bounded_location_candidate(
+            text[
+                match.start():match.end() + 120
+            ]
+        )
+
+        if not candidate:
+            continue
+
+        tail = _address_core_and_tail(candidate)
+
+        if not tail or not tail["address"]:
+            continue
+
+        candidate_rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+            tail["completeness"],
+            0,
+        )
+
+        if candidate_rank <= best_rank:
+            continue
+
+        best_rank = candidate_rank
+        best_intel = {
+            "property_address_full": tail["address"],
+            "property_address_components": {
+                **baseline_components,
+                **{
+                    key: value
+                    for key, value in tail["components"].items()
+                    if value is not None
+                },
+            },
+            "property_address_completeness": tail["completeness"],
+            "property_address_source": "government_record",
+            "property_address_confidence": "HIGH",
+            "property_address_evidence": _property_address_evidence(
+                text,
+                tail["address"],
+            ),
+        }
+
+        if best_rank >= _PROPERTY_ADDRESS_COMPLETENESS_RANK["full_postal"]:
+            break
+
+    return best_intel
+
+
+def extract_staff_report_address(
+    text: str,
+    application: dict,
+) -> dict:
+    """
+    Fuller same-street address + labeled parcel evidence from this
+    application's own staff-report material elsewhere in the packet.
+
+    Returns a stable shape of property_address_* fields plus
+    parcel_number; every value is None when the packet provides
+    nothing beyond what the agenda block already established.
+    """
+
+    empty = {
+        **_property_address_fields(_empty_property_address()),
+        "parcel_number": None,
+    }
+
+    if not text or not isinstance(application, dict):
+        return empty
+
+    application_number = application.get("application_number")
+
+    if not application_number:
+        return empty
+
+    best_intel = None
+    best_rank = 0
+    parcel_number = application.get("parcel_number")
+
+    for position in _application_number_positions(
+        text,
+        application_number,
+    ):
+
+        window_end = position + STAFF_REPORT_WINDOW_CHARS
+
+        next_other = _next_other_application_number_position(
+            text,
+            application_number,
+            position + len(application_number),
+        )
+
+        if next_other is not None:
+            window_end = min(window_end, next_other)
+
+        window = text[position:window_end]
+
+        intel, parcel = _staff_report_window_intel(
+            window,
+            application,
+        )
+
+        if parcel and not parcel_number:
+            parcel_number = parcel
+
+        if intel:
+
+            rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+                intel["property_address_completeness"],
+                0,
+            )
+
+            if rank > best_rank:
+                best_rank = rank
+                best_intel = intel
+
+        if best_intel and best_rank >= _PROPERTY_ADDRESS_COMPLETENESS_RANK["full_postal"]:
+            break
+
+    # Document-wide fallback: the fullest same-street form sometimes
+    # appears only in another item's letter inside the same packet.
+    if best_rank < _PROPERTY_ADDRESS_COMPLETENESS_RANK["full_postal"]:
+
+        document_intel = _document_wide_same_street_intel(
+            text,
+            application,
+        )
+
+        if document_intel:
+            rank = _PROPERTY_ADDRESS_COMPLETENESS_RANK.get(
+                document_intel["property_address_completeness"],
+                0,
+            )
+
+            if rank > best_rank:
+                best_rank = rank
+                best_intel = document_intel
+
+    result = dict(empty)
+
+    if best_intel:
+        result.update(best_intel)
+
+    result["parcel_number"] = parcel_number
+
+    return result
+
+
+# ============================================================
 # AGENDA STATUS
 # ============================================================
 
@@ -1636,6 +2471,15 @@ def extract_applications(
                     block
                 ),
 
+            # Full property address intelligence (street number/name,
+            # explicit unit, city/state/ZIP -- each only when the source
+            # provides it). project_address above keeps its historical
+            # street-level contract; this is the most complete
+            # evidence-backed form.
+            **_property_address_fields(
+                extract_property_address(block)
+            ),
+
             "neighborhood":
                 extract_neighborhood(
                     block
@@ -1784,6 +2628,10 @@ def extract_application_from_block(
             extract_address(
                 block
             ),
+
+        **_property_address_fields(
+            extract_property_address(block)
+        ),
 
         "neighborhood":
             extract_neighborhood(

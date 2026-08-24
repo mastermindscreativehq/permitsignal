@@ -280,6 +280,108 @@ def _apply_staff_report_identity(
 
 
 # ============================================================================
+# STAFF-REPORT FULL ADDRESS ENRICHMENT
+# ============================================================================
+
+_ADDRESS_COMPLETENESS_RANK = {
+    None: 0,
+    "free_text": 1,
+    "area_description": 2,
+    "street_only": 2,
+    "street_with_unit": 3,
+    "street_city_state": 4,
+    "full_postal": 5,
+}
+
+# Fields that describe one atomic address finding: they are upgraded
+# together (only to a strictly more complete form) or left alone --
+# never mixed between two different evidence sources.
+_ADDRESS_ATOMIC_FIELDS = (
+    "property_address_full",
+    "property_address_components",
+    "property_address_completeness",
+    "property_address_source",
+    "property_address_confidence",
+    "property_address_evidence",
+)
+
+
+def _apply_staff_report_addresses(
+    applications: list[dict[str, Any]],
+    text: str,
+) -> list[dict[str, Any]]:
+    """
+    Upgrade each application's property address with fuller SAME-street
+    evidence (city/state/ZIP/unit) and labeled parcel IDs from the
+    application's own staff-report material elsewhere in the packet
+    (see application_extractor.extract_staff_report_address()).
+
+    Purely additive/upgrade-only:
+      - parcel_number fills only when currently None;
+      - the property_address_* field group is replaced only by a
+        STRICTLY more complete form of the same street (ranked by
+        _ADDRESS_COMPLETENESS_RANK), never by a weaker or unrelated one;
+      - components merge per-key, never overwriting a present value.
+    """
+    module = _import_service(APPLICATION_EXTRACTOR_MODULE)
+
+    fn = getattr(module, "extract_staff_report_address", None)
+
+    if not callable(fn):
+        return applications
+
+    results: list[dict[str, Any]] = []
+
+    for application in applications:
+
+        try:
+            enrichment = fn(text, application) or {}
+        except Exception:
+            enrichment = {}
+
+        merged = dict(application)
+
+        # Labeled parcel evidence fills only a missing parcel.
+        if (
+            merged.get("parcel_number") is None
+            and enrichment.get("parcel_number")
+        ):
+            merged["parcel_number"] = enrichment["parcel_number"]
+
+        current_rank = _ADDRESS_COMPLETENESS_RANK.get(
+            application.get("property_address_completeness"),
+            0,
+        ) or (2 if application.get("project_address") else 0)
+
+        upgrade_rank = _ADDRESS_COMPLETENESS_RANK.get(
+            enrichment.get("property_address_completeness"),
+            0,
+        )
+
+        if upgrade_rank > current_rank:
+
+            merged_components = dict(
+                application.get("property_address_components") or {}
+            )
+
+            for component_key, component_value in (
+                enrichment.get("property_address_components") or {}
+            ).items():
+                if component_value is not None:
+                    merged_components[component_key] = component_value
+
+            for field_name in _ADDRESS_ATOMIC_FIELDS:
+                if field_name == "property_address_components":
+                    merged[field_name] = merged_components
+                elif enrichment.get(field_name) is not None:
+                    merged[field_name] = enrichment[field_name]
+
+        results.append(merged)
+
+    return results
+
+
+# ============================================================================
 # FRICTION ADAPTER
 # ============================================================================
 
@@ -1411,6 +1513,11 @@ def run_pipeline(
     )
 
     applications = _apply_staff_report_identity(
+        applications,
+        text,
+    )
+
+    applications = _apply_staff_report_addresses(
         applications,
         text,
     )

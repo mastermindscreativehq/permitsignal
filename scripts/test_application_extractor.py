@@ -9,6 +9,8 @@ from backend.app.services.application_extractor import (
     split_agenda_items,
     extract_case_identifier,
     extract_description,
+    extract_property_address,
+    parse_address_components,
     find_case_identifiers,
 )
 
@@ -841,6 +843,302 @@ def run_live_identifier_checks() -> None:
 
 
 # ============================================================
+# PROPERTY ADDRESS EXTRACTION REGRESSION CHECKS
+# ============================================================
+
+def run_property_address_checks() -> bool:
+    """
+    Regression coverage for full property address intelligence:
+
+    - labeled anchors (Property Address / Site Address / Project
+      Address / Property Location) with same-line and following-line
+      values,
+    - located-at agenda style ("located at 2000 N Canyon Road."),
+    - unit tails ("Suite 210"), city/state/ZIP comma tails, and their
+      combination,
+    - honest area_description capture for legal-description anchors
+      (real Tulsa PUD-871.pdf wording),
+    - evidence-backed absence: no address in the block means all
+      property_address_* fields stay None -- never a fabricated one,
+    - component parsing (street number/name/unit/city/state/ZIP).
+    """
+
+    print()
+    print("=" * 80)
+    print("PROPERTY ADDRESS EXTRACTION CHECKS")
+    print("=" * 80)
+
+    results = []
+
+    def fields(block):
+        intel = extract_property_address(block)
+        return intel
+
+    # --------------------------------------------------------
+    # Located-at agenda style (Provo).
+    # --------------------------------------------------------
+
+    intel = fields(
+        "PUBLIC HEARING - Petitioner Tyson Reynolds requests a Zone Map "
+        "Amendment for the property located at 2000 N Canyon Road. "
+        "Pleasant View Neighborhood. Dustin Wright 801-852-6415."
+    )
+
+    results.append(
+        check(
+            intel["property_address_full"] == "2000 N Canyon Road",
+            'Located-at capture: full == "2000 N Canyon Road"',
+        )
+    )
+    results.append(
+        check(
+            intel["property_address_completeness"] == "street_only",
+            "Located-at completeness is street_only (no invented city/state)",
+        )
+    )
+    results.append(
+        check(
+            intel["property_address_components"]["street_number"] == "2000"
+            and intel["property_address_components"]["street_name"]
+            == "N Canyon Road",
+            "Located-at components split number and street name",
+        )
+    )
+    results.append(
+        check(
+            intel["property_address_source"] == "government_record"
+            and intel["property_address_confidence"] == "HIGH",
+            "Located-at provenance is government_record/HIGH",
+        )
+    )
+    results.append(
+        check(
+            "2000 N Canyon Road" in (intel["property_address_evidence"] or ""),
+            "Located-at evidence quotes the source text",
+        )
+    )
+
+    # --------------------------------------------------------
+    # Full postal form.
+    # --------------------------------------------------------
+
+    intel = fields(
+        "Property Address: 1507 South 180 East, Provo, UT 84601"
+    )
+
+    results.append(
+        check(
+            intel["property_address_full"]
+            == "1507 South 180 East, Provo, UT 84601",
+            'Labeled anchor keeps the full postal form verbatim',
+        )
+    )
+    results.append(
+        check(
+            intel["property_address_completeness"] == "full_postal",
+            "Full form classifies as full_postal",
+        )
+    )
+    comps = intel["property_address_components"]
+    results.append(
+        check(
+            comps["city"] == "Provo"
+            and comps["state"] in ("UT", "Utah")
+            and comps["postal_code"] == "84601",
+            "Full-form components carry city/state/ZIP",
+        )
+    )
+
+    # --------------------------------------------------------
+    # Unit tail plus city/state (no ZIP present -> no invented ZIP).
+    # --------------------------------------------------------
+
+    intel = fields(
+        "Site Address: 500 Main Street Suite 210, Provo, Utah"
+    )
+
+    results.append(
+        check(
+            intel["property_address_completeness"] == "street_city_state",
+            "Unit + city/state without ZIP stays street_city_state",
+        )
+    )
+    comps = intel["property_address_components"]
+    results.append(
+        check(
+            comps["unit"] == "210"
+            and comps["city"] == "Provo"
+            and comps["postal_code"] is None,
+            "Unit captured and missing ZIP stays None",
+        )
+    )
+
+    # --------------------------------------------------------
+    # Area description (real Tulsa PUD-871.pdf anchor wording).
+    # --------------------------------------------------------
+
+    intel = fields(
+        "2. Property Location\nWest of North Sheridan Road between East "
+        "76th Street North and East 86th Street North.\nTract Size: "
+        "+506 acres"
+    )
+
+    results.append(
+        check(
+            intel["property_address_full"]
+            == "West of North Sheridan Road between East 76th Street North "
+            "and East 86th Street North",
+            "Legal description captured verbatim under Property Location",
+        )
+    )
+    results.append(
+        check(
+            intel["property_address_completeness"] == "area_description",
+            "Non-street location classifies honestly as area_description",
+        )
+    )
+
+    # --------------------------------------------------------
+    # Evidence-backed absence.
+    # --------------------------------------------------------
+
+    intel = fields(
+        "ORDINANCE TEXT AMENDMENT - Request to amend the zoning map "
+        "text regarding accessory dwelling units citywide."
+    )
+
+    results.append(
+        check(
+            intel["property_address_full"] is None
+            and intel["property_address_evidence"] is None
+            and intel["property_address_completeness"] is None,
+            "No address in block -> evidence-backed None everywhere",
+        )
+    )
+
+    # --------------------------------------------------------
+    # parse_address_components on an already-captured string.
+    # --------------------------------------------------------
+
+    comps = parse_address_components(
+        "1507 South 180 East, Provo, UT 84601"
+    )
+
+    results.append(
+        check(
+            comps["street_number"] == "1507"
+            and comps["street_name"].lower().startswith("south 180 east")
+            and comps["city"] == "Provo"
+            and comps["state"] in ("UT", "Utah")
+            and comps["postal_code"] == "84601",
+            "parse_address_components splits a full postal string",
+        )
+    )
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print()
+    print(f"Checks passed: {passed}")
+    print(f"Checks failed: {failed}")
+
+    return failed == 0
+
+
+def run_live_property_address_checks() -> bool:
+    """
+    Live-document checks: the real Provo packet must keep its
+    historical project_address values byte-identical while gaining
+    property_address_full from agenda blocks, and the Tulsa staff
+    report must yield its area description.
+    """
+
+    print()
+    print("=" * 80)
+    print("LIVE PROPERTY ADDRESS PROVENANCE CHECKS")
+    print("=" * 80)
+
+    results = []
+
+    text = read_pdf(PDF_PATH)
+
+    applications = extract_applications(text)
+
+    by_number = {
+        application.get("application_number"): application
+        for application in applications
+    }
+
+    plrz = by_number.get("PLRZ20260116")
+
+    results.append(
+        check(
+            plrz is not None
+            and plrz.get("project_address") == "2000 N Canyon Road",
+            "Live Provo: legacy project_address unchanged",
+        )
+    )
+    results.append(
+        check(
+            plrz is not None
+            and plrz.get("property_address_full") == "2000 N Canyon Road"
+            and plrz.get("property_address_completeness") == "street_only",
+            "Live Provo: property_address_full populated from agenda block",
+        )
+    )
+
+    ordinance = [
+        application
+        for application in applications
+        if application.get("application_type") == "Ordinance Text Amendment"
+    ]
+
+    results.append(
+        check(
+            ordinance
+            and all(application.get("property_address_full") is None for application in ordinance),
+            "Live Provo: addressless ordinance items keep None (no fabrication)",
+        )
+    )
+
+    tulsa_path = Path("data/validation/PUD-871.pdf")
+
+    if tulsa_path.exists():
+
+        tulsa_text = read_pdf(tulsa_path)
+
+        tulsa_apps = extract_applications(tulsa_text)
+
+        tulsa_addresses = [
+            application.get("property_address_full")
+            for application in tulsa_apps
+        ]
+
+        results.append(
+            check(
+                any(
+                    address
+                    and address.startswith("West of North Sheridan Road")
+                    for address in tulsa_addresses
+                ),
+                "Live Tulsa PUD-871.pdf: area description preserved",
+            )
+        )
+
+    else:
+        print(f"[SKIP] live Tulsa fixture not found: {tulsa_path}")
+
+    passed = sum(results)
+    failed = len(results) - passed
+
+    print()
+    print(f"Checks passed: {passed}")
+    print(f"Checks failed: {failed}")
+
+    return failed == 0
+
+
+# ============================================================
 # MAIN
 # ============================================================
 
@@ -945,12 +1243,29 @@ def main():
 
     run_live_identifier_checks()
 
+    # --------------------------------------------------------
+    # 8. Property address extraction regression checks
+    # --------------------------------------------------------
+
+    property_address_passed = run_property_address_checks()
+
+    # --------------------------------------------------------
+    # 9. Live property address provenance
+    # --------------------------------------------------------
+
+    live_property_address_passed = run_live_property_address_checks()
+
     print()
     print("=" * 80)
     print("APPLICATION EXTRACTION TEST COMPLETE")
     print("=" * 80)
 
-    if not regression_passed or not identifier_checks_passed:
+    if (
+        not regression_passed
+        or not identifier_checks_passed
+        or not property_address_passed
+        or not live_property_address_passed
+    ):
         raise SystemExit(1)
 
 

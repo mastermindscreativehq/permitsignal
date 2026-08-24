@@ -111,6 +111,19 @@ class Opportunity:
     neighborhood: Optional[str] = None
     description: Optional[str] = None
 
+    # Full property address intelligence (see application_extractor.
+    # extract_property_address() / extract_staff_report_address()).
+    # project_address keeps its historical street-level contract;
+    # these carry the most complete evidence-backed form plus its
+    # components and provenance. Components absent from the source
+    # stay None -- never fabricated.
+    property_address_full: Optional[str] = None
+    property_address_components: Optional[dict[str, Any]] = None
+    property_address_completeness: Optional[str] = None
+    property_address_source: Optional[str] = None
+    property_address_confidence: Optional[str] = None
+    property_address_evidence: Optional[str] = None
+
     # Property (parcel/zoning/area -- populated only when the source
     # document explicitly labels them; see application_extractor.
     # extract_property_details()).
@@ -731,6 +744,45 @@ def extract_property_extras(
     }
 
 
+def extract_address_intelligence(
+    application: Mapping[str, Any],
+) -> dict[str, Any]:
+    """
+    Most complete evidence-backed property address + provenance,
+    additive to project_address above. Never fabricates a missing
+    component; see application_extractor for the capture rules.
+    """
+
+    components = _first(
+        application,
+        "property_address_components",
+    )
+
+    if not isinstance(components, Mapping):
+        components = None
+
+    return {
+        "property_address_full": _text(
+            _first(application, "property_address_full")
+        ),
+        "property_address_components": (
+            dict(components) if components else None
+        ),
+        "property_address_completeness": _text(
+            _first(application, "property_address_completeness")
+        ),
+        "property_address_source": _text(
+            _first(application, "property_address_source")
+        ),
+        "property_address_confidence": _text(
+            _first(application, "property_address_confidence")
+        ),
+        "property_address_evidence": _text(
+            _first(application, "property_address_evidence")
+        ),
+    }
+
+
 def extract_owner_data(
     application: Mapping[str, Any],
 ) -> dict[str, Optional[str]]:
@@ -1119,6 +1171,7 @@ def build_opportunity(
     )
 
     property_extras = extract_property_extras(application)
+    address_intelligence = extract_address_intelligence(application)
     owner = extract_owner_data(application)
     applicant_of_record = extract_applicant_of_record_data(application)
     parties = extract_parties_data(application)
@@ -1246,6 +1299,7 @@ def build_opportunity(
         description=project[
             "description"
         ],
+        **address_intelligence,
         parcel_number=property_extras["parcel_number"],
         acreage=property_extras["acreage"],
         zoning=property_extras["zoning"],
