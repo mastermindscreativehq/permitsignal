@@ -35,8 +35,11 @@ if not _allowed_origins:
     _allowed_origins = [
         "http://localhost:3000",
         "http://localhost:3001",
-        "https://permitsignal.vercel.app",
     ]
+# Always allow the production Vercel frontend regardless of env var.
+_vercel_origin = "https://permitsignal.vercel.app"
+if _vercel_origin not in _allowed_origins:
+    _allowed_origins.append(_vercel_origin)
 
 app.add_middleware(
     CORSMiddleware,
