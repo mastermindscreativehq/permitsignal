@@ -34,6 +34,7 @@ from unittest.mock import patch
 import backend.app.services.lead_repository  # noqa: F401
 
 from backend.app.services import commercial_lead_intelligence, economic_intelligence, outreach_intelligence
+from backend.app.services import address_intelligence
 from backend.app.services import approval_stage_intelligence as action_stage_intelligence
 from backend.app.services import pipeline_orchestrator as po
 from backend.app.services.commercial_lead_intelligence import (
@@ -524,6 +525,10 @@ def main():
             # PDF/network dependency, so the full mocked pipeline runs the
             # real module -- proving the actual hook wiring.
             po.ACTION_STAGE_INTELLIGENCE_MODULE: action_stage_intelligence,
+            # Address intelligence is deterministic (no network when
+            # providers are not configured), so the full mocked pipeline
+            # runs the real module.
+            po.ADDRESS_INTELLIGENCE_MODULE: address_intelligence,
         }
         return mapping[name]
 

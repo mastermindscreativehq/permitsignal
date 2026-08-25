@@ -1038,6 +1038,72 @@ def enrich_lead(application_number: str):
 
 
 # ---------------------------------------------------------------------------
+# Address Intelligence
+#
+# Geocode, verify, and enrich a single lead's property address with
+# verified real-world location intelligence.  Entirely additive:
+# government-record addresses are never modified.
+# ---------------------------------------------------------------------------
+
+class AddressEnrichmentRequest(BaseModel):
+    force: bool = False
+
+
+@app.post("/leads/{application_number}/address/enrich")
+def enrich_address(application_number: str, request: AddressEnrichmentRequest):
+    """
+    Enrich a single lead's property address with geocoded location
+    intelligence.
+
+    This is additive-only: the original government-record address is
+    never modified.  Results are cached per normalized address and
+    carried forward across pipeline runs.
+
+    force=True re-enriches even if previously resolved within TTL.
+    """
+    try:
+        from backend.app.services import address_intelligence
+        from backend.app.services import lead_repository
+
+        lead = _get_investigation_lead_or_404(application_number)
+
+        # Carry forward any existing address intelligence fields
+        # from the lead record for the enrichment function.
+        result = address_intelligence.enrich_address_intelligence(
+            lead,
+            force=request.force,
+        )
+
+        # Persist the enriched address fields back to the lead
+        _persist_investigation_lead(lead)
+
+        return {
+            "status": "success",
+            "application_number": application_number,
+            "address_enrichment_status": lead.get("address_enrichment_status"),
+            "address_source_address": lead.get("address_source_address"),
+            "address_geocoded_lat": lead.get("address_geocoded_lat"),
+            "address_geocoded_lng": lead.get("address_geocoded_lng"),
+            "address_geocoded_city": lead.get("address_geocoded_city"),
+            "address_geocoded_state": lead.get("address_geocoded_state"),
+            "address_geocoded_postal": lead.get("address_geocoded_postal"),
+            "address_geocoded_county": lead.get("address_geocoded_county"),
+            "address_geocoded_full": lead.get("address_geocoded_full"),
+            "address_geocoding_source": lead.get("address_geocoding_source"),
+            "address_geocoding_confidence": lead.get("address_geocoding_confidence"),
+            "address_geocoding_method": lead.get("address_geocoding_method"),
+            "address_geocoding_evidence": lead.get("address_geocoding_evidence"),
+            "address_geocoded_at": lead.get("address_geocoded_at"),
+            "address_parcel_id_verified": lead.get("address_parcel_id_verified"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+# ---------------------------------------------------------------------------
 # Entity Intelligence (deep case research)
 #
 # Bounded iterative public-web research over one case's entities:

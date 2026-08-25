@@ -160,6 +160,23 @@ _COLUMNS = (
     "staff_contact_name",
     "staff_contact_email",
     "staff_contact_phone",
+    # Address Intelligence (migration 0009)
+    "address_geocoded_lat",
+    "address_geocoded_lng",
+    "address_geocoded_city",
+    "address_geocoded_state",
+    "address_geocoded_postal",
+    "address_geocoded_county",
+    "address_geocoded_full",
+    "address_geocoding_source",
+    "address_geocoding_confidence",
+    "address_geocoding_method",
+    "address_geocoding_evidence",
+    "address_geocoded_at",
+    "address_parcel_id_verified",
+    "address_parcel_source",
+    "address_source_address",
+    "address_enrichment_status",
 )
 
 

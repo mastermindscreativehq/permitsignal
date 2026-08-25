@@ -47,6 +47,7 @@ OUTREACH_INTELLIGENCE_MODULE = "backend.app.services.outreach_intelligence"
 APPROVAL_INTELLIGENCE_ENGINE_MODULE = "backend.app.services.approval_intelligence_engine"
 ACTION_STAGE_INTELLIGENCE_MODULE = "backend.app.services.approval_stage_intelligence"
 PRICING_ENGINE_MODULE = "backend.app.services.pricing_engine"
+ADDRESS_INTELLIGENCE_MODULE = "backend.app.services.address_intelligence"
 LEAD_REPOSITORY_MODULE = "backend.app.services.lead_repository"
 
 
@@ -1174,6 +1175,58 @@ def _apply_action_intelligence(
 
 
 # ============================================================================
+# ADDRESS INTELLIGENCE
+# ============================================================================
+
+def _apply_address_intelligence(
+    opportunities: list[dict[str, Any]],
+    previous_leads: dict[str, dict[str, Any]],
+    force: bool = False,
+    verbose: bool = True,
+) -> list[dict[str, Any]]:
+    """
+    Enrich all opportunities with geocoded location intelligence.
+
+    This is ADDITIVE ONLY: government-record addresses are never
+    modified.  External provider failures are non-fatal.
+
+    Inserted after staff-report address upgrades and before friction
+    analysis so that downstream stages can benefit from enriched
+    coordinates.
+    """
+    if verbose:
+        print()
+        print("[2c/10] Enriching address intelligence...")
+
+    module = _import_service(ADDRESS_INTELLIGENCE_MODULE)
+
+    enrich_all_fn = getattr(module, "enrich_all_addresses", None)
+
+    if enrich_all_fn is None:
+        if verbose:
+            print("Address intelligence service not available — skipping.")
+        return opportunities
+
+    try:
+        result = enrich_all_fn(
+            opportunities,
+            previous_leads=previous_leads,
+            force=force,
+            verbose=verbose,
+        )
+
+        if not isinstance(result, list):
+            return opportunities
+
+        return result
+
+    except Exception as exc:
+        if verbose:
+            print(f"Address intelligence failed (non-fatal): {exc}")
+        return opportunities
+
+
+# ============================================================================
 # PRICING ENGINE
 # ============================================================================
 
@@ -1527,6 +1580,23 @@ def run_pipeline(
             f"Applications detected: {len(applications)}"
         )
 
+    # Load previous leads early so address intelligence and outreach
+    # intelligence both have access to cached state from prior runs.
+    previous_leads_by_number = _load_previous_leads_by_number(
+        sync_to_supabase,
+        Path(output_path),
+    )
+
+    # ----------------------------------------------------------------
+    # 2c. Address Intelligence
+    # ----------------------------------------------------------------
+
+    applications = _apply_address_intelligence(
+        applications,
+        previous_leads_by_number,
+        verbose=verbose,
+    )
+
     # ------------------------------------------------------------------------
     # 3. Friction
     # ------------------------------------------------------------------------
@@ -1648,11 +1718,6 @@ def run_pipeline(
 
     completed_opportunities = _apply_commercial_intelligence(
         completed_opportunities
-    )
-
-    previous_leads_by_number = _load_previous_leads_by_number(
-        sync_to_supabase,
-        Path(output_path),
     )
 
     completed_opportunities = _apply_outreach_intelligence(

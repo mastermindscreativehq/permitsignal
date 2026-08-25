@@ -105,6 +105,26 @@ export interface Lead {
   property_address_confidence?: string | null;
   property_address_evidence?: string | null;
 
+  // Address Intelligence — geocoded, verified real-world location data.
+  // Additive only: never overwrites government-record source fields.
+  // (address_intelligence.enrich_address_intelligence, migration 0009)
+  address_source_address?: string | null;
+  address_geocoded_lat?: number | null;
+  address_geocoded_lng?: number | null;
+  address_geocoded_city?: string | null;
+  address_geocoded_state?: string | null;
+  address_geocoded_postal?: string | null;
+  address_geocoded_county?: string | null;
+  address_geocoded_full?: string | null;
+  address_geocoding_source?: string | null;
+  address_geocoding_confidence?: string | null;
+  address_geocoding_method?: string | null;
+  address_geocoding_evidence?: string | null;
+  address_geocoded_at?: string | null;
+  address_parcel_id_verified?: string | null;
+  address_parcel_source?: string | null;
+  address_enrichment_status?: string | null;
+
   // Property (populated only when the source document labels them)
   parcel_number: string | null;
   acreage: string | null;
