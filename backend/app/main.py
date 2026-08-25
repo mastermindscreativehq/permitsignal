@@ -35,6 +35,7 @@ if not _allowed_origins:
     _allowed_origins = [
         "http://localhost:3000",
         "http://localhost:3001",
+        "https://permitsignal.vercel.app",
     ]
 
 app.add_middleware(
