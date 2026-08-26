@@ -155,6 +155,7 @@ _COLUMNS = (
     "outreach_events",
     "source",
     "source_url",
+    "source_key",
     "municipality",
     "state",
     "staff_contact_name",

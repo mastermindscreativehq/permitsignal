@@ -11,7 +11,7 @@ from backend.app.collectors.provo import (
 )
 from backend.app.services import applicant_enrichment, case_report_generator, case_report_store, discovery_orchestrator, document_downloader
 from backend.app.services import lead_repository, matrix_engine, opportunity_builder, outreach_intelligence, pipeline_orchestrator
-from backend.app.services import investigation_engine
+from backend.app.services import investigation_engine, source_registry
 
 
 app = FastAPI(
@@ -1308,6 +1308,137 @@ def pipeline_ingest(request: PipelineIngestRequest):
 
     except HTTPException:
         raise
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+# =========================================================================
+# SOURCE REGISTRY — government source management
+# =========================================================================
+
+
+class GovernmentSourceRequest(BaseModel):
+    source_key: str
+    state: str
+    city: Optional[str] = None
+    county: Optional[str] = None
+    agency: str
+    source_url: str
+    source_type: str
+    platform: Optional[str] = None
+    adapter: str = "pdf"
+    active: bool = True
+    config: Optional[dict] = None
+
+
+@app.get("/sources")
+def list_sources(
+    active_only: bool = False,
+    state: Optional[str] = None,
+):
+    """List all configured government sources."""
+    sources = source_registry.list_sources(active_only=active_only, state=state)
+    return {
+        "status": "success",
+        "sources": sources,
+        "total": len(sources),
+    }
+
+
+@app.get("/sources/{source_key}")
+def get_source(source_key: str):
+    """Get a single government source by key."""
+    source = source_registry.get_source(source_key)
+    if not source:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No source found for source_key={source_key!r}",
+        )
+    return {"status": "success", "source": source}
+
+
+@app.post("/sources")
+def create_source(request: GovernmentSourceRequest):
+    """Create or update a government source."""
+    source = request.model_dump()
+    if request.config is None:
+        source["config"] = {}
+    result = source_registry.upsert_source(source)
+    return {"status": "success", "source": result}
+
+
+@app.post("/sources/{source_key}/deactivate")
+def deactivate_source(source_key: str):
+    """Deactivate a government source."""
+    found = source_registry.deactivate_source(source_key)
+    if not found:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No source found for source_key={source_key!r}",
+        )
+    return {"status": "success", "source_key": source_key, "active": False}
+
+
+@app.post("/sources/ingest")
+def ingest_all_sources(
+    reference_date: Optional[date] = None,
+    sync_to_supabase: bool = False,
+    dry_run: bool = False,
+    source_keys: Optional[list[str]] = None,
+):
+    """
+    Run multi-source discovery and ingestion across all active sources.
+    Each source is discovered via its configured adapter, new documents
+    are downloaded, and ingestible documents are run through the pipeline.
+    """
+    try:
+        result = discovery_orchestrator.discover_and_ingest_all(
+            reference_date=reference_date,
+            sync_to_supabase=sync_to_supabase,
+            dry_run=dry_run,
+            source_keys=source_keys,
+        )
+        return {"status": "success", **result}
+
+    except Exception as exc:
+        raise HTTPException(
+            status_code=500,
+            detail=str(exc),
+        )
+
+
+@app.post("/sources/{source_key}/ingest")
+def ingest_source(
+    source_key: str,
+    reference_date: Optional[date] = None,
+    sync_to_supabase: bool = False,
+    dry_run: bool = False,
+):
+    """
+    Discover and ingest documents from a single government source.
+    """
+    source = source_registry.get_source(source_key)
+    if not source:
+        raise HTTPException(
+            status_code=404,
+            detail=f"No source found for source_key={source_key!r}",
+        )
+
+    try:
+        from backend.app.services import document_registry
+        registry = document_registry.load_registry()
+        result = discovery_orchestrator.ingest_from_source(
+            source,
+            registry,
+            reference_date=reference_date,
+            sync_to_supabase=sync_to_supabase,
+            dry_run=dry_run,
+        )
+        return {"status": "success", **result}
 
     except Exception as exc:
         raise HTTPException(
